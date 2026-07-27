@@ -45,6 +45,7 @@ swift run
 - `type=select`：下拉框，`options="标签=值|标签=值"`
 - `type=number`：数字输入 + 步进器，可加 `min=` / `max=`
 - `type=text`：自由填写框
+- `presets="1小时=60|2小时=120"`（number/text 可选）：渲染成一排**快捷按钮**，点一下直接填值，与输入框并存、当前命中的高亮
 - 值含空格用双引号包住；`hint=` 会显示为提示/tooltip
 
 ### 菜单栏图标（`<switch.menubar>`）

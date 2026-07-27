@@ -15,6 +15,14 @@ enum SwitchState {
     case unknown
 }
 
+/// 剩余秒数 → "24:31" / "1:02:05"
+func formatCountdown(_ seconds: Int) -> String {
+    if seconds >= 3600 {
+        return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+    }
+    return String(format: "%d:%02d", seconds / 60, seconds % 60)
+}
+
 // MARK: - 参数
 
 enum ParamType: String {
@@ -36,6 +44,7 @@ struct SwitchParam: Identifiable, Equatable {
     let type: ParamType
     let defaultValue: String
     let options: [ParamOption] // select 专用
+    let presets: [ParamOption] // number/text 的快捷按钮（presets="1小时=60|2小时=120"）
     let minValue: Int?         // number 专用
     let maxValue: Int?         // number 专用
     let hint: String?
@@ -114,7 +123,27 @@ struct SwitchScript: Identifiable, Equatable {
         let pairs = tokenizePairs(spec)
         guard let key = pairs["key"], !key.isEmpty else { return nil }
         let type = ParamType(rawValue: pairs["type"] ?? "") ?? .text
-        let options: [ParamOption] = (pairs["options"] ?? "")
+        let options = parseOptions(pairs["options"])
+        var defaultValue = pairs["default"] ?? ""
+        if type == .select, defaultValue.isEmpty, let first = options.first {
+            defaultValue = first.value
+        }
+        return SwitchParam(
+            key: key,
+            label: pairs["label"] ?? key,
+            type: type,
+            defaultValue: defaultValue,
+            options: options,
+            presets: parseOptions(pairs["presets"]),
+            minValue: pairs["min"].flatMap(Int.init),
+            maxValue: pairs["max"].flatMap(Int.init),
+            hint: pairs["hint"]
+        )
+    }
+
+    /// "标签=值|标签=值" → [ParamOption]（用于 options 和 presets）
+    private static func parseOptions(_ raw: String?) -> [ParamOption] {
+        (raw ?? "")
             .split(separator: "|")
             .compactMap { part in
                 let s = String(part)
@@ -126,20 +155,6 @@ struct SwitchScript: Identifiable, Equatable {
                     value: String(s[s.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
                 )
             }
-        var defaultValue = pairs["default"] ?? ""
-        if type == .select, defaultValue.isEmpty, let first = options.first {
-            defaultValue = first.value
-        }
-        return SwitchParam(
-            key: key,
-            label: pairs["label"] ?? key,
-            type: type,
-            defaultValue: defaultValue,
-            options: options,
-            minValue: pairs["min"].flatMap(Int.init),
-            maxValue: pairs["max"].flatMap(Int.init),
-            hint: pairs["hint"]
-        )
     }
 
     private static func parseMenuBar(_ spec: String) -> MenuBarConfig? {

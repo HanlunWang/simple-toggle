@@ -7,8 +7,8 @@ final class StatusBarController: NSObject {
     static let shared = StatusBarController()
 
     private var items: [String: NSStatusItem] = [:]
-    private var tickTimer: Timer?
 
+    /// 由 SwitchManager 在状态变化及倒计时每秒刷新时调用
     func sync(with manager: SwitchManager) {
         let active = manager.switches.filter {
             $0.menubar?.mode == .add && manager.states[$0.id] == .on
@@ -25,19 +25,6 @@ final class StatusBarController: NSObject {
             items[sw.id] = item
             configure(item, for: sw, manager: manager)
         }
-
-        // 有倒计时在跑时每秒刷新一次标题
-        let needsTick = active.contains { manager.remainingSeconds(for: $0) != nil }
-        if needsTick, tickTimer == nil {
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                Task { @MainActor in
-                    StatusBarController.shared.sync(with: SwitchManager.shared)
-                }
-            }
-        } else if !needsTick {
-            tickTimer?.invalidate()
-            tickTimer = nil
-        }
     }
 
     private func configure(_ item: NSStatusItem, for sw: SwitchScript, manager: SwitchManager) {
@@ -52,7 +39,7 @@ final class StatusBarController: NSObject {
             title = config.icon
         }
         if let remaining = manager.remainingSeconds(for: sw) {
-            title += (title.isEmpty ? "" : " ") + Self.format(remaining)
+            title += (title.isEmpty ? "" : " ") + formatCountdown(remaining)
         }
         button.title = title
         button.toolTip = "\(sw.name)（OpenToggle）"
@@ -75,12 +62,5 @@ final class StatusBarController: NSObject {
               let sw = SwitchManager.shared.switches.first(where: { $0.id == id })
         else { return }
         SwitchManager.shared.setSwitch(sw, to: false)
-    }
-
-    private static func format(_ seconds: Int) -> String {
-        if seconds >= 3600 {
-            return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-        }
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }

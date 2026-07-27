@@ -13,12 +13,15 @@ final class SwitchManager: ObservableObject {
     @Published private(set) var paramValues: [String: [String: String]] = [:]
     /// menubar mode=replace 的开关开启时，主图标显示这个（emoji 或 "sf:<name>"）
     @Published private(set) var iconOverride: String?
+    /// replace 模式开关的倒计时文本（显示在主图标旁）
+    @Published private(set) var iconOverrideCountdown: String?
 
     /// daemon 型开关持有的常驻进程
     private var daemons: [String: Process] = [:]
     /// 开启时刻（用于倒计时显示）
     private var activatedAt: [String: Date] = [:]
     private var pollTimer: Timer?
+    private var countdownTimer: Timer?
     private var isPolling = false
 
     private let defaults = UserDefaults.standard
@@ -300,10 +303,26 @@ final class SwitchManager: ObservableObject {
     // MARK: - 菜单栏联动
 
     private func syncMenuBar() {
-        iconOverride = switches
-            .first { $0.menubar?.mode == .replace && states[$0.id] == .on }?
-            .menubar?.icon
+        let replaceSwitch = switches.first { $0.menubar?.mode == .replace && states[$0.id] == .on }
+        iconOverride = replaceSwitch?.menubar?.icon
+        iconOverrideCountdown = replaceSwitch
+            .flatMap { remainingSeconds(for: $0) }
+            .map(formatCountdown)
         StatusBarController.shared.sync(with: self)
+        updateCountdownTimer()
+    }
+
+    /// 任一显示中的倒计时（add 或 replace 模式）都需要每秒刷新一次菜单栏
+    private func updateCountdownTimer() {
+        let needsTick = switches.contains { remainingSeconds(for: $0) != nil }
+        if needsTick, countdownTimer == nil {
+            countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.syncMenuBar() }
+            }
+        } else if !needsTick {
+            countdownTimer?.invalidate()
+            countdownTimer = nil
+        }
     }
 
     // MARK: - 持久化恢复

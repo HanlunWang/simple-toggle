@@ -14,7 +14,7 @@ enum ExampleScripts {
     # <switch.icon> ☕️
     # <switch.type> daemon
     # <switch.param> key=mode type=select label=模式 default=d options="仅保持屏幕=d|仅保持任务=is|屏幕与任务=dis"
-    # <switch.param> key=duration type=number label=时长(分钟) default=0 min=0 max=1440 hint="0 = 一直保持"
+    # <switch.param> key=duration type=number label=时长(分钟) default=0 min=0 max=1440 presets="不限=0|1小时=60|2小时=120|4小时=240|8小时=480" hint="0 = 一直保持"
     # <switch.menubar> mode=add icon=☕️ countdown=on
     #
     # daemon 契约：app 以 `script run` 启动并持有本进程；关 = 收到 SIGTERM。

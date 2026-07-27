@@ -76,7 +76,7 @@ private struct SwitchRow: View {
                 Text(script.name)
                     .lineLimit(1)
                 if let remaining = manager.remainingSeconds(for: script) {
-                    Text(Self.format(remaining))
+                    Text(formatCountdown(remaining))
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -138,13 +138,6 @@ private struct SwitchRow: View {
         case .unknown: .orange
         }
     }
-
-    private static func format(_ seconds: Int) -> String {
-        if seconds >= 3600 {
-            return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-        }
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
-    }
 }
 
 // MARK: - 参数控件（select / number / text）
@@ -162,30 +155,58 @@ private struct ParamControl: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(param.label)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            Spacer()
-            switch param.type {
-            case .select:
-                Picker("", selection: binding) {
-                    ForEach(param.options, id: \.value) { option in
-                        Text(option.label).tag(option.value)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(param.label)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                switch param.type {
+                case .select:
+                    Picker("", selection: binding) {
+                        ForEach(param.options, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                case .number:
+                    NumberField(binding: binding, min: param.minValue, max: param.maxValue)
+                case .text:
+                    TextField(param.hint ?? "", text: binding)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 140)
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .fixedSize()
-            case .number:
-                NumberField(binding: binding, min: param.minValue, max: param.maxValue)
-            case .text:
-                TextField(param.hint ?? "", text: binding)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 140)
+            }
+            if !param.presets.isEmpty {
+                PresetButtons(presets: param.presets, selection: binding)
             }
         }
         .help(param.hint ?? "")
+    }
+}
+
+/// 常用值快捷按钮（与输入框并存；当前值命中的高亮）
+struct PresetButtons: View {
+    let presets: [ParamOption]
+    let selection: Binding<String>
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 54), spacing: 4)],
+                  alignment: .leading, spacing: 4) {
+            ForEach(presets, id: \.value) { preset in
+                if selection.wrappedValue == preset.value {
+                    Button(preset.label) {}
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                } else {
+                    Button(preset.label) { selection.wrappedValue = preset.value }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+            }
+        }
     }
 }
 
