@@ -18,21 +18,21 @@ struct ScriptDraft {
     static let toggleTemplate = """
     case "$1" in
       on)
-        # 在这里写开启命令
+        # command(s) to turn the switch on
         ;;
       off)
-        # 在这里写关闭命令
+        # command(s) to turn the switch off
         ;;
       status)
-        # 输出 on 或 off
+        # print "on" or "off" to stdout
         echo off
         ;;
     esac
     """
 
     static let daemonTemplate = """
-    # 长跑进程：app 启动并持有它，关 = SIGTERM
-    # 用 exec 顶替 shell，让信号直达
+    # Long-running foreground process.
+    # Use `exec` so SIGTERM reaches it directly.
     exec sleep 999999
     """
 
@@ -74,7 +74,7 @@ struct ScriptDraft {
     /// 自动生成的契约头（只读区域）
     func headerLines() -> [String] {
         var lines = [shebang]
-        lines.append("# <switch.name> \(sanitize(name.isEmpty ? "未命名开关" : name))")
+        lines.append("# <switch.name> \(sanitize(name.isEmpty ? "Untitled Switch" : name))")
         lines.append("# <switch.icon> \(sanitize(icon.isEmpty ? "🔘" : icon))")
         lines.append("# <switch.type> \(type.rawValue)")
         for param in params where !param.key.isEmpty {
@@ -121,8 +121,8 @@ struct ParamDraft: Identifiable {
     var label = ""
     var type: ParamType = .select
     var defaultValue = ""
-    var options = "" // "标签=值|标签=值"
-    var presets = "" // 快捷按钮："1小时=60|2小时=120"
+    var options = "" // "label=value|label=value"
+    var presets = "" // 快捷按钮："1 h=60|2 h=120"
     var minValue = ""
     var maxValue = ""
     var hint = ""
@@ -185,12 +185,13 @@ final class WindowCloseGuard: NSObject, NSWindowDelegate {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if EditorState.shared.isDirty {
+            let s = Loc.shared.s
             let alert = NSAlert()
-            alert.messageText = "有未保存的修改"
-            alert.informativeText = "关闭窗口将丢失这些修改。"
+            alert.messageText = s.closeAlertTitle
+            alert.informativeText = s.closeAlertMessage
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "仍要关闭")
-            alert.addButton(withTitle: "取消")
+            alert.addButton(withTitle: s.closeAnyway)
+            alert.addButton(withTitle: s.cancel)
             guard alert.runModal() == .alertFirstButtonReturn else { return false }
             EditorState.shared.isDirty = false
         }
@@ -237,6 +238,7 @@ private struct WindowAccessor: NSViewRepresentable {
 
 struct ManagerView: View {
     @ObservedObject var manager: SwitchManager
+    @ObservedObject private var loc = Loc.shared
     @State private var selection: String?
     @State private var draft: ScriptDraft?
     /// 上次加载/保存时的完整脚本内容，用于脏状态判断
@@ -253,7 +255,8 @@ struct ManagerView: View {
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 170, ideal: 200)
+                // max 上限防止侧边栏拉太宽、挤爆右侧编辑区的最小宽度
+                .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 240)
         } detail: {
             if draft != nil {
                 EditorForm(
@@ -272,13 +275,14 @@ struct ManagerView: View {
                 )
             } else {
                 ContentUnavailableView(
-                    "选择一个开关，或新建",
+                    loc.s.selectPromptTitle,
                     systemImage: "switch.2",
-                    description: Text("左下角 ＋ 新建开关")
+                    description: Text(loc.s.selectPromptDetail)
                 )
             }
         }
-        .frame(minWidth: 860, minHeight: 560)
+        // 920 = 侧边栏最大 240 + 编辑区两栏最小 (330 + 340) 留有余量，任何拖拽组合都不溢出
+        .frame(minWidth: 920, minHeight: 560)
         .background(WindowAccessor { window in
             WindowCloseGuard.shared.attach(to: window)
         })
@@ -314,16 +318,16 @@ struct ManagerView: View {
         .onDisappear {
             EditorState.shared.isDirty = false
         }
-        .confirmationDialog("当前开关有未保存的修改", isPresented: $showDiscardDialog) {
-            Button("放弃修改", role: .destructive) {
+        .confirmationDialog(loc.s.discardTitle, isPresented: $showDiscardDialog) {
+            Button(loc.s.discardConfirm, role: .destructive) {
                 pendingAction?()
                 pendingAction = nil
             }
-            Button("继续编辑", role: .cancel) {
+            Button(loc.s.keepEditing, role: .cancel) {
                 pendingAction = nil
             }
         } message: {
-            Text("离开后这些修改将丢失。")
+            Text(loc.s.discardMessage)
         }
     }
 
@@ -340,6 +344,7 @@ struct ManagerView: View {
     private var sidebar: some View {
         List(selection: $selection) {
             ForEach(manager.switches) { sw in
+                let enabled = manager.isEnabled(sw)
                 HStack(spacing: 8) {
                     Circle()
                         .fill(manager.states[sw.id] == .on ? Color.green : Color(nsColor: .tertiaryLabelColor))
@@ -352,10 +357,24 @@ struct ManagerView: View {
                     Text(sw.type == .daemon ? "daemon" : "toggle")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
+                    Button {
+                        manager.setEnabled(sw, !enabled)
+                    } label: {
+                        Image(systemName: enabled ? "eye" : "eye.slash")
+                            .font(.caption)
+                            .foregroundStyle(enabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+                    }
+                    .buttonStyle(.borderless)
+                    .help(enabled ? loc.s.hideFromMenuBar : loc.s.showInMenuBar)
                 }
+                .opacity(enabled ? 1 : 0.45)
                 .tag(sw.id)
                 .contextMenu {
-                    Button("删除（移到废纸篓）", role: .destructive) {
+                    Button(enabled ? loc.s.hideFromMenuBar : loc.s.showInMenuBar) {
+                        manager.setEnabled(sw, !enabled)
+                    }
+                    Divider()
+                    Button(loc.s.deleteToTrash, role: .destructive) {
                         delete(sw)
                     }
                 }
@@ -375,15 +394,16 @@ struct ManagerView: View {
                         EditorState.shared.isDirty = false
                     }
                 } label: {
-                    Label("新建开关", systemImage: "plus")
+                    Label(loc.s.newSwitch, systemImage: "plus")
                 }
                 Spacer()
+                LanguageMenu()
                 Button {
                     NSWorkspace.shared.open(manager.scriptsDirectory)
                 } label: {
                     Image(systemName: "folder")
                 }
-                .help("在 Finder 中打开脚本目录")
+                .help(loc.s.openFolderHelp)
             }
             .buttonStyle(.borderless)
             .padding(10)
@@ -408,6 +428,29 @@ struct ManagerView: View {
     }
 }
 
+// MARK: - 语言切换菜单
+
+struct LanguageMenu: View {
+    @ObservedObject private var loc = Loc.shared
+
+    var body: some View {
+        Menu {
+            Picker("", selection: $loc.language) {
+                Text(loc.s.langSystem).tag(AppLanguage.system)
+                Text("English").tag(AppLanguage.english)
+                Text("简体中文").tag(AppLanguage.simplifiedChinese)
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Image(systemName: "globe")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(loc.s.languageHelp)
+    }
+}
+
 // MARK: - 编辑表单（左：配置；右：脚本文件视图）
 
 private struct EditorForm: View {
@@ -416,11 +459,13 @@ private struct EditorForm: View {
     @Binding var savedSnapshot: String
     let onSaved: (String) -> Void
 
+    @ObservedObject private var loc = Loc.shared
     @State private var statusMessage: String?
     @State private var statusIsError = false
     @State private var dismissTask: Task<Void, Never>?
 
     private var isDirty: Bool { draft.fullScript() != savedSnapshot }
+    private var s: S { loc.s }
 
     var body: some View {
         // footer 单独占一行，避免 safeAreaInset 在 HSplitView 上不生效、盖住表单底部
@@ -434,10 +479,10 @@ private struct EditorForm: View {
                     }
                     .padding(16)
                 }
-                .frame(minWidth: 360, idealWidth: 400)
+                .frame(minWidth: 330, idealWidth: 400)
 
                 filePane
-                    .frame(minWidth: 380)
+                    .frame(minWidth: 340)
             }
             Divider()
             footer
@@ -450,18 +495,18 @@ private struct EditorForm: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .bottom, spacing: 10) {
-                    FieldColumn("名称（面板里的显示名）") {
-                        TextField("如：Keep Awake", text: $draft.name)
+                    FieldColumn(s.nameLabel, detail: s.nameHelp) {
+                        TextField(s.namePlaceholder, text: $draft.name)
                             .textFieldStyle(.roundedBorder)
                     }
-                    FieldColumn("图标") {
+                    FieldColumn(s.iconLabel, detail: s.iconHelp) {
                         IconPickerButton(icon: $draft.icon)
                     }
                 }
-                FieldColumn("类型") {
+                FieldColumn(s.typeLabel, detail: s.typeHelp) {
                     Picker("", selection: $draft.type) {
-                        Text("命令式 toggle").tag(SwitchType.toggle)
-                        Text("常驻进程 daemon").tag(SwitchType.daemon)
+                        Text(s.typeToggle).tag(SwitchType.toggle)
+                        Text(s.typeDaemon).tag(SwitchType.daemon)
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
@@ -473,23 +518,13 @@ private struct EditorForm: View {
                         }
                     }
                 }
-                Text(draft.type == .toggle
-                     ? "开/关各执行一次命令；app 每 5 秒调一次 status 判断状态。适合改系统设置类。"
-                     : "开 = 启动长跑进程并由 app 持有；关 = 发 SIGTERM；自然退出(exit 0)视为正常关闭。适合 caffeinate、循环类。")
+                Text(draft.type == .toggle ? s.toggleFootnote : s.daemonFootnote)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(6)
         } label: {
-            SectionHeader(title: "基本信息", helpTitle: "基本信息", helpText: """
-            **名称**：菜单栏面板和左侧列表里的显示名。新建时也用它生成脚本文件名（创建后文件名不再变）。
-
-            **图标**：点按钮打开选择器，从 Emoji / SF Symbols 网格里选，也可以在「自定义」里输入符号名（如 `cup.and.saucer`）。
-
-            **类型**（决定 app 怎么调用你的脚本）：
-            - **命令式 toggle**：开/关时各执行一次 `脚本 on` / `脚本 off`；app 每 5 秒执行 `脚本 status`（需输出 `on` 或 `off`）来点亮状态灯。适合"改一个系统设置"类开关。
-            - **常驻进程 daemon**：开时执行 `脚本 run` 并一直持有这个进程；关 = 发 SIGTERM；进程 exit 0 视为自然结束、开关自动归位。适合 caffeinate、轮循脚本这类长跑任务。
-            """)
+            Text(s.basicsTitle).font(.headline)
         }
     }
 
@@ -499,7 +534,7 @@ private struct EditorForm: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
                 if draft.params.isEmpty {
-                    Text("暂无参数。加了参数后，面板里该开关可展开出下拉框、数字、快捷按钮、填写框等控件，值会以环境变量传给脚本。")
+                    Text(s.paramsEmpty)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -514,26 +549,13 @@ private struct EditorForm: View {
                 Button {
                     draft.params.append(ParamDraft())
                 } label: {
-                    Label("添加参数", systemImage: "plus")
+                    Label(s.addParam, systemImage: "plus")
                 }
                 .buttonStyle(.borderless)
             }
             .padding(6)
         } label: {
-            SectionHeader(title: "参数 — 面板里的可调选项", helpTitle: "参数", helpText: """
-            每个参数会出现在菜单栏面板中该开关的展开区（⌄）里，用户调好的值以**环境变量**传给脚本：key 为 `mode` → 脚本里读 `$SWITCH_MODE`。开关开着时修改参数会立即重启生效。
-
-            **key**：参数标识（英文/数字），决定环境变量名。
-            **显示名**：面板里显示的中文标签。
-            **控件类型**：
-            - **下拉选择**：从固定选项里挑一个，需填「选项」
-            - **数字**：数字输入框 + 步进器，可设最小/最大值
-            - **填写框**：自由文本
-
-            **选项 / 快捷按钮** 都用 `标签=值|标签=值` 格式，如 `1小时=60|2小时=120`。快捷按钮会显示成一排小按钮，点一下直接把值填进输入框，和手动输入并存。
-
-            **默认值**：用户没调过时的初始值。**提示**：悬停时的说明文字。
-            """)
+            Text(s.paramsTitle).font(.headline)
         }
     }
 
@@ -542,44 +564,41 @@ private struct EditorForm: View {
     private var menubarSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 10) {
-                Picker("", selection: $draft.menubarMode) {
-                    Text("不显示").tag("none")
-                    Text("新增一个图标").tag("add")
-                    Text("替换主图标").tag("replace")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .onChange(of: draft.menubarMode) { _, new in
-                    if new != "none", draft.menubarIcon.isEmpty {
-                        draft.menubarIcon = draft.icon
+                FieldColumn("", detail: s.modeHelp) {
+                    Picker("", selection: $draft.menubarMode) {
+                        Text(s.modeNone).tag("none")
+                        Text(s.modeAdd).tag("add")
+                        Text(s.modeReplace).tag("replace")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .onChange(of: draft.menubarMode) { _, new in
+                        if new != "none", draft.menubarIcon.isEmpty {
+                            draft.menubarIcon = draft.icon
+                        }
                     }
                 }
                 if draft.menubarMode != "none" {
-                    FieldColumn("菜单栏里显示的图标") {
+                    FieldColumn(s.menubarIconLabel, detail: s.iconHelp) {
                         IconPickerButton(icon: $draft.menubarIcon)
                     }
-                    Toggle("图标旁显示倒计时", isOn: $draft.countdown)
-                        .font(.callout)
+                    HStack(spacing: 4) {
+                        Toggle(s.countdownToggle, isOn: $draft.countdown)
+                            .font(.callout)
+                        HelpButton(title: s.countdownToggle, text: s.countdownHelp)
+                    }
                     if draft.countdown {
                         let hasDuration = draft.params.contains { $0.key == "duration" && $0.type == .number }
-                        Label(hasDuration
-                              ? "倒计时读取「duration」参数（分钟，0 = 不限时不显示）"
-                              : "还没有 key 为 duration 的数字参数，倒计时不会显示——在上方「参数」里加一个",
+                        Label(hasDuration ? s.countdownOK : s.countdownMissing,
                               systemImage: hasDuration ? "checkmark.circle" : "exclamationmark.triangle")
                             .font(.caption)
-                            .foregroundStyle(hasDuration ? .secondary : Color.orange)
+                            .foregroundStyle(hasDuration ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
                     }
                 }
             }
             .padding(6)
         } label: {
-            SectionHeader(title: "开启时的菜单栏图标", helpTitle: "菜单栏图标", helpText: """
-            控制这个开关**开启期间**在系统菜单栏的存在感（关掉后自动消失）：
-
-            - **新增一个图标**：菜单栏多出一个独立小图标，一眼可见"它在跑"；点击图标可直接关闭这个开关。
-            - **替换主图标**：OpenToggle 自己的主图标临时换成这里选的图标。
-            - **倒计时**：在图标旁边显示剩余时间（如 ☕️ 24:31），每秒刷新。它读取名为 `duration` 的数字参数（单位分钟，0 = 不限时则不显示倒计时），所以需要先在「参数」里建一个 key 为 `duration` 的数字参数。
-            """)
+            Text(s.menubarTitle).font(.headline)
         }
     }
 
@@ -592,22 +611,11 @@ private struct EditorForm: View {
                     .foregroundStyle(.secondary)
                 Text(draft.fileName)
                     .font(.system(.callout, design: .monospaced))
-                HelpButton(title: "脚本文件", text: """
-                右边这块就是将要保存的脚本文件本体，分两段：
-
-                **上半段（自动生成，只读）**：由左侧表单实时生成的"契约头"注释，app 靠它识别名称、图标、参数等。不需要也不能手改——改左边表单即可。
-
-                **下半段（可编辑）**：脚本正文，直接写 shell 代码：
-                - **toggle 型**：脚本会被以 `on` / `off` / `status` 参数调用（取 `$1` 判断），`status` 需输出 `on` 或 `off`
-                - **daemon 型**：以 `run` 调用，用 `exec` 启动一个长跑进程
-                - 参数值从环境变量读取（见上方 `$SWITCH_*` 胶囊）
-
-                保存时上下两段合成完整文件写入脚本目录；正在运行的开关会立即用新内容重启。
-                """)
+                HelpButton(title: draft.fileName, text: s.scriptFileHelp)
                 Spacer()
                 if !draft.envNames.isEmpty {
                     HStack(spacing: 4) {
-                        Text("可用变量")
+                        Text(s.envVarsLabel)
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                         ForEach(draft.envNames, id: \.self) { env in
@@ -618,7 +626,7 @@ private struct EditorForm: View {
                                 .background(Capsule().fill(Color.accentColor.opacity(0.15)))
                         }
                     }
-                    .help("参数值以这些环境变量注入，脚本里直接使用")
+                    .help(s.envVarsHelp)
                 }
             }
 
@@ -636,11 +644,11 @@ private struct EditorForm: View {
                     }
                 }
                 .padding(10)
-                .padding(.trailing, 56) // 给"自动生成"角标留位
+                .padding(.trailing, 80) // 给"自动生成"角标留位
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(red: 0.09, green: 0.10, blue: 0.12))
                 .overlay(alignment: .topTrailing) {
-                    Text("自动生成")
+                    Text(s.autoGenerated)
                         .font(.caption2)
                         .foregroundStyle(Color(white: 0.45))
                         .padding(6)
@@ -673,17 +681,17 @@ private struct EditorForm: View {
                     .font(.callout)
                     .transition(.opacity)
             } else if isDirty, draft.sourceURL != nil {
-                Text("有未保存的修改")
+                Text(s.unsavedHint)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Spacer()
             if let url = draft.sourceURL {
-                Button("在 Finder 中显示") {
+                Button(s.revealInFinder) {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
             }
-            Button(draft.sourceURL == nil ? "创建开关" : "保存修改") { save() }
+            Button(draft.sourceURL == nil ? s.createButton : s.saveButton) { save() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty || !isDirty)
         }
@@ -707,10 +715,10 @@ private struct EditorForm: View {
             if let sw = manager.switches.first(where: { $0.id == id }) {
                 manager.restartIfRunning(sw)
             }
-            showStatus("已保存 \(id)", isError: false)
+            showStatus(String(format: s.savedToastFormat, id), isError: false)
             onSaved(id)
         } catch {
-            showStatus("保存失败：\(error.localizedDescription)", isError: true)
+            showStatus(String(format: s.saveFailedFormat, error.localizedDescription), isError: true)
         }
     }
 
@@ -748,25 +756,28 @@ private struct CodeEditor: View {
 private struct ParamDraftRow: View {
     @Binding var param: ParamDraft
     let onDelete: () -> Void
+    @ObservedObject private var loc = Loc.shared
+
+    private var s: S { loc.s }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .bottom, spacing: 10) {
-                FieldColumn("key（变量名）", help: "英文标识；脚本里读环境变量 $SWITCH_\(param.key.isEmpty ? "KEY" : param.key.uppercased())") {
+                FieldColumn(s.keyLabel, detail: s.keyHelp) {
                     TextField("mode", text: $param.key)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.callout, design: .monospaced))
                         .frame(width: 110)
                 }
-                FieldColumn("面板显示名") {
-                    TextField("如：模式", text: $param.label)
+                FieldColumn(s.displayNameLabel, detail: s.displayNameHelp) {
+                    TextField(s.displayNamePlaceholder, text: $param.label)
                         .textFieldStyle(.roundedBorder)
                 }
-                FieldColumn("控件类型") {
+                FieldColumn(s.controlTypeLabel, detail: s.controlTypeHelp) {
                     Picker("", selection: $param.type) {
-                        Text("下拉选择").tag(ParamType.select)
-                        Text("数字").tag(ParamType.number)
-                        Text("填写框").tag(ParamType.text)
+                        Text(s.ptSelect).tag(ParamType.select)
+                        Text(s.ptNumber).tag(ParamType.number)
+                        Text(s.ptText).tag(ParamType.text)
                     }
                     .labelsHidden()
                     .fixedSize()
@@ -775,65 +786,65 @@ private struct ParamDraftRow: View {
                     Image(systemName: "minus.circle")
                 }
                 .buttonStyle(.borderless)
-                .help("删除该参数")
+                .help(s.deleteParamHelp)
                 .padding(.bottom, 4)
             }
 
             switch param.type {
             case .select:
-                FieldColumn("选项（格式：标签=值，用 | 分隔多个）") {
-                    TextField("仅屏幕=d|屏幕与任务=dis", text: $param.options)
+                FieldColumn(s.optionsLabel, detail: s.optionsHelp) {
+                    TextField("Display only=d|Display & system=dis", text: $param.options)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.callout, design: .monospaced))
                 }
                 HStack(alignment: .bottom, spacing: 10) {
-                    FieldColumn("默认值（填选项里的\u{201C}值\u{201D}，留空取第一个）") {
+                    FieldColumn(s.defaultLabel, detail: s.defaultHelp) {
                         TextField("d", text: $param.defaultValue)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 160)
                     }
-                    FieldColumn("悬停提示（可选）") {
+                    FieldColumn(s.hintLabel, detail: s.hintHelp) {
                         TextField("", text: $param.hint)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
             case .number:
                 HStack(alignment: .bottom, spacing: 10) {
-                    FieldColumn("最小值") {
+                    FieldColumn(s.minLabel, detail: s.minMaxHelp) {
                         TextField("0", text: $param.minValue)
                             .textFieldStyle(.roundedBorder).frame(width: 64)
                     }
-                    FieldColumn("最大值") {
+                    FieldColumn(s.maxLabel, detail: s.minMaxHelp) {
                         TextField("1440", text: $param.maxValue)
                             .textFieldStyle(.roundedBorder).frame(width: 64)
                     }
-                    FieldColumn("默认值") {
+                    FieldColumn(s.defaultLabel, detail: s.defaultHelp) {
                         TextField("0", text: $param.defaultValue)
                             .textFieldStyle(.roundedBorder).frame(width: 64)
                     }
-                    FieldColumn("悬停提示（可选）") {
-                        TextField("如：0 = 一直保持", text: $param.hint)
+                    FieldColumn(s.hintLabel, detail: s.hintHelp) {
+                        TextField("", text: $param.hint)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
-                FieldColumn("快捷按钮（可选；格式：标签=值，用 | 分隔，显示为一排小按钮）") {
-                    TextField("1小时=60|2小时=120|4小时=240|8小时=480", text: $param.presets)
+                FieldColumn(s.presetsLabel, detail: s.presetsHelp) {
+                    TextField("1 h=60|2 h=120|4 h=240|8 h=480", text: $param.presets)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.callout, design: .monospaced))
                 }
             case .text:
                 HStack(alignment: .bottom, spacing: 10) {
-                    FieldColumn("默认值") {
+                    FieldColumn(s.defaultLabel, detail: s.defaultHelp) {
                         TextField("", text: $param.defaultValue)
                             .textFieldStyle(.roundedBorder).frame(width: 140)
                     }
-                    FieldColumn("输入框占位提示（可选）") {
+                    FieldColumn(s.hintLabel, detail: s.hintHelp) {
                         TextField("", text: $param.hint)
                             .textFieldStyle(.roundedBorder)
                     }
                 }
-                FieldColumn("快捷按钮（可选；格式：标签=值，用 | 分隔）") {
-                    TextField("公司代理=http://proxy:8080|直连=", text: $param.presets)
+                FieldColumn(s.presetsLabel, detail: s.presetsHelp) {
+                    TextField("Corp proxy=http://proxy:8080|Direct=", text: $param.presets)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.callout, design: .monospaced))
                 }
@@ -842,47 +853,41 @@ private struct ParamDraftRow: View {
     }
 }
 
-// MARK: - 通用小组件：字段标题列 / 分组标题 / 详解按钮
+// MARK: - 通用小组件：字段标题列 / 详解按钮
 
-/// 给输入控件加一个常驻的小标题（placeholder 一输入就没了，标题不会）
+/// 输入控件上方的常驻小标题；detail 提供该字段的详细说明（ⓘ 弹窗）
 struct FieldColumn<Content: View>: View {
     let title: String
-    var help: String?
+    var detail: String?
     @ViewBuilder let content: Content
 
-    init(_ title: String, help: String? = nil, @ViewBuilder content: () -> Content) {
+    init(_ title: String, detail: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
-        self.help = help
+        self.detail = detail
         self.content = content()
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if !title.isEmpty || detail != nil {
+                HStack(spacing: 3) {
+                    if !title.isEmpty {
+                        Text(title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let detail {
+                        HelpButton(title: title, text: detail)
+                            .controlSize(.small)
+                    }
+                }
+            }
             content
         }
-        .help(help ?? "")
     }
 }
 
-/// GroupBox 标题 + 详解按钮
-struct SectionHeader: View {
-    let title: String
-    let helpTitle: String
-    let helpText: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .font(.headline)
-            HelpButton(title: helpTitle, text: helpText)
-        }
-    }
-}
-
-/// "?" 按钮，点开显示详细说明（支持 Markdown 粗体等）
+/// "?" 按钮，点开显示详细说明（支持 Markdown 粗体、代码等）
 struct HelpButton: View {
     let title: String
     let text: String
@@ -893,22 +898,25 @@ struct HelpButton: View {
             showing.toggle()
         } label: {
             Image(systemName: "questionmark.circle")
-                .foregroundStyle(.secondary)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .buttonStyle(.borderless)
         .popover(isPresented: $showing, arrowEdge: .bottom) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(title)
-                        .font(.headline)
+                    if !title.isEmpty {
+                        Text(title)
+                            .font(.headline)
+                    }
                     Text(LocalizedStringKey(text))
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(14)
             }
-            .frame(width: 380)
-            .frame(maxHeight: 420)
+            .frame(width: 400)
+            .frame(maxHeight: 440)
         }
     }
 }

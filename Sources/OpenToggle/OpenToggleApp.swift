@@ -5,6 +5,7 @@ import AppKit
 struct OpenToggleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var manager = SwitchManager.shared
+    @ObservedObject private var loc = Loc.shared
 
     var body: some Scene {
         MenuBarExtra {
@@ -14,7 +15,7 @@ struct OpenToggleApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("脚本管理 — OpenToggle", id: "manager") {
+        Window(loc.s.managerWindowTitle, id: "manager") {
             ManagerView(manager: manager)
         }
         .defaultSize(width: 960, height: 600)
@@ -56,12 +57,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard EditorState.shared.isDirty else { return .terminateNow }
         NSApp.activate(ignoringOtherApps: true)
+        let s = Loc.shared.s
         let alert = NSAlert()
-        alert.messageText = "脚本管理器里有未保存的修改"
-        alert.informativeText = "现在退出将丢失这些修改。"
+        alert.messageText = s.quitAlertTitle
+        alert.informativeText = s.quitAlertMessage
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "仍要退出")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: s.quitAnyway)
+        alert.addButton(withTitle: s.cancel)
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
     }
 

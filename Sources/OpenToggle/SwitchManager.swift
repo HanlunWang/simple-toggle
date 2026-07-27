@@ -11,6 +11,8 @@ final class SwitchManager: ObservableObject {
     @Published private(set) var states: [String: SwitchState] = [:]
     /// 参数当前值：switchID → (paramKey → value)
     @Published private(set) var paramValues: [String: [String: String]] = [:]
+    /// 停用的开关：不出现在面板、不轮询、不随启动恢复；脚本与配置保留
+    @Published private(set) var disabledIDs: Set<String> = []
     /// menubar mode=replace 的开关开启时，主图标显示这个（emoji 或 "sf:<name>"）
     @Published private(set) var iconOverride: String?
     /// replace 模式开关的倒计时文本（显示在主图标旁）
@@ -27,6 +29,8 @@ final class SwitchManager: ObservableObject {
     private let defaults = UserDefaults.standard
     private let desiredKey = "OpenToggle.desiredStates"
     private let paramsKey = "OpenToggle.paramValues"
+    private let disabledKey = "OpenToggle.disabledSwitches"
+    private let seededKey = "OpenToggle.seededScripts"
 
     var scriptsDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
@@ -38,6 +42,7 @@ final class SwitchManager: ObservableObject {
     func start() {
         seedExamplesIfNeeded()
         loadParamValues()
+        disabledIDs = Set(defaults.stringArray(forKey: disabledKey) ?? [])
         reload()
         restoreDesiredStates()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -69,15 +74,26 @@ final class SwitchManager: ObservableObject {
         refreshStates()
     }
 
+    /// 增量 seeding：每个预制脚本只安装一次（记录在 UserDefaults），
+    /// 用户删除后不会复活；新版本新增的预制脚本能补装到已有安装。
     private func seedExamplesIfNeeded() {
         let fm = FileManager.default
-        guard !fm.fileExists(atPath: scriptsDirectory.path) else { return }
         try? fm.createDirectory(at: scriptsDirectory, withIntermediateDirectories: true)
-        for example in ExampleScripts.all {
+        var seeded = Set(defaults.stringArray(forKey: seededKey) ?? [])
+        var disabled = Set(defaults.stringArray(forKey: disabledKey) ?? [])
+        for example in ExampleScripts.all where !seeded.contains(example.fileName) {
             let url = scriptsDirectory.appendingPathComponent(example.fileName)
-            try? example.content.write(to: url, atomically: true, encoding: .utf8)
-            try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+            if !fm.fileExists(atPath: url.path) {
+                try? example.content.write(to: url, atomically: true, encoding: .utf8)
+                try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+                if !example.enabledByDefault {
+                    disabled.insert(example.fileName)
+                }
+            }
+            seeded.insert(example.fileName)
         }
+        defaults.set(Array(seeded), forKey: seededKey)
+        defaults.set(Array(disabled), forKey: disabledKey)
     }
 
     /// 编辑器 GUI 保存脚本入口
@@ -131,6 +147,31 @@ final class SwitchManager: ObservableObject {
                 await MainActor.run { self?.refreshStates() }
             }
         }
+    }
+
+    // MARK: - 启用 / 停用
+
+    /// 面板中可见（启用）的开关
+    var visibleSwitches: [SwitchScript] {
+        switches.filter { !disabledIDs.contains($0.id) }
+    }
+
+    func isEnabled(_ sw: SwitchScript) -> Bool {
+        !disabledIDs.contains(sw.id)
+    }
+
+    /// 停用：从面板隐藏、停止轮询与恢复；开着的先关掉。脚本与配置保留。
+    func setEnabled(_ sw: SwitchScript, _ enabled: Bool) {
+        if !enabled, states[sw.id] == .on {
+            setSwitch(sw, to: false)
+        }
+        if enabled {
+            disabledIDs.remove(sw.id)
+        } else {
+            disabledIDs.insert(sw.id)
+        }
+        defaults.set(Array(disabledIDs), forKey: disabledKey)
+        refreshStates()
     }
 
     // MARK: - 参数
@@ -265,7 +306,7 @@ final class SwitchManager: ObservableObject {
     func refreshStates() {
         guard !isPolling else { return }
         isPolling = true
-        let toPoll = switches
+        let toPoll = switches.filter { !disabledIDs.contains($0.id) }
         let daemonAlive = daemons.mapValues { $0.isRunning }
         let envs = Dictionary(uniqueKeysWithValues: toPoll.map { ($0.id, environment(for: $0)) })
         Task.detached { [weak self] in
@@ -298,6 +339,11 @@ final class SwitchManager: ObservableObject {
                 self.syncMenuBar()
             }
         }
+    }
+
+    /// 语言切换后重建非 SwiftUI 的菜单栏元素（NSStatusItem 的菜单文案）
+    func languageDidChange() {
+        syncMenuBar()
     }
 
     // MARK: - 菜单栏联动
@@ -334,7 +380,7 @@ final class SwitchManager: ObservableObject {
     /// 启动时恢复上次的开/关状态
     private func restoreDesiredStates() {
         let desired = desiredStates()
-        for sw in switches where desired[sw.id] == true {
+        for sw in switches where desired[sw.id] == true && !disabledIDs.contains(sw.id) {
             switch sw.type {
             case .daemon:
                 spawnDaemon(sw)

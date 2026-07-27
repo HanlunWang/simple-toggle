@@ -1,93 +1,161 @@
 # OpenToggle
 
-macOS 菜单栏"自动化开关中心"MVP demo：把你自己写的脚本自动渲染成菜单栏里的受管开关（on/off + 状态灯），开=启动、关=停止、重启后记住状态。
+**Turn any script into a managed menu bar switch on macOS.**
 
-> 完整规划见 `menubar-toggle-center-plan.md`（Downloads）。本 demo 覆盖 P1（MenuBarExtra 骨架）+ 简化版 P2（脚本目录扫描 + 注释头契约 + 进程管理 + 状态持久化）。
+English | [简体中文](README.zh-CN.md)
 
-## 运行
+OpenToggle renders each of your automation scripts as a first-class switch in the macOS menu bar — a name, a status light, and a toggle. Turning a switch on starts the automation; turning it off stops it; state survives restarts. Write the automation in any language, declare a few metadata directives, and OpenToggle handles the process lifecycle, status polling, parameter UI, and persistence.
+
+## Why
+
+Everyday macOS automations — keep the display awake, jiggle a key to stay "active", flip a proxy, show hidden files — each traditionally require a separate single-purpose utility crowding the menu bar. Script-to-menu-bar tools exist (SwiftBar, xbar, Hammerspoon), but their model is *script → printed output → display*. None of them offer a first-class **switch abstraction**: managed on/off semantics, process lifecycle, and state persistence have to be hand-rolled per plugin.
+
+OpenToggle's model is *script → managed switch*. The contract is the product.
+
+|  | SwiftBar / xbar | Hammerspoon | **OpenToggle** |
+|---|---|---|---|
+| Mental model | print output → display | Lua automation framework | script → managed switch |
+| On/off semantics | hand-rolled per plugin | hand-rolled in Lua | built-in |
+| Process lifecycle | manual (pid files, pkill) | manual | spawn / SIGTERM / orphan cleanup |
+| State persistence | manual | manual | automatic, restored on launch |
+| Parameter UI | none | DIY | declarative (dropdown / number / presets / text) |
+
+## Features
+
+- **Two switch forms** — imperative `toggle` (on/off/status commands) and long-running `daemon` (spawn & hold, SIGTERM to stop)
+- **Declarative parameters** — dropdowns, bounded numbers with preset buttons, free text; values injected as environment variables; live-restart on change
+- **Menu bar presence** — a switch can add its own status item (or replace the app icon) while active, with an optional per-second countdown
+- **State persistence** — desired states stored and re-applied at launch; daemons re-spawned, toggles re-checked before re-applying
+- **Script manager GUI** — sidebar CRUD, metadata form with per-field documentation, icon picker (emoji / SF Symbols), dark code editor with an auto-generated read-only contract header; lossless round-trip editing of hand-written scripts
+- **Safety** — orphan cleanup on quit, natural daemon exit (exit 0) resets the switch, unsaved-change guards on every exit path, delete moves to Trash
+- **Localized** — English and Simplified Chinese, follows the system language, switchable at runtime
+
+## Requirements
+
+- macOS 14+
+- Swift toolchain (build from source; app bundle distribution is on the roadmap)
+
+## Getting Started
 
 ```bash
+git clone git@github.com:HanlunWang/open-toggle.git
+cd open-toggle
 swift run
 ```
 
-菜单栏会出现一个 ⎘ 开关图标（SF Symbol `switch.2`），点开即是开关面板。终端 Ctrl+C 或面板里"退出"结束（退出时会清理所有 daemon 子进程）。
+A switch icon appears in the menu bar. First launch seeds a library of ready-to-use switches into the scripts directory (each installed once; deleting one won't resurrect it):
 
-## 脚本契约
+| Switch | Form | What it does | Default |
+|---|---|---|---|
+| ☕️ Keep Awake | daemon | `caffeinate` with a mode dropdown and 1/2/4/8 h duration presets; menu bar countdown | on |
+| 👁️ Show Hidden Files | toggle | Finder hidden-file visibility | on |
+| 🌙 Dark Mode | toggle | System appearance (one-time Automation permission prompt) | on |
+| 🔇 Mute Audio | toggle | System output mute | on |
+| ▦ Hide Desktop Icons | toggle | Clean desktop for screen sharing / recording | on |
+| ⬒ Dock Auto-Hide | toggle | Dock auto-hiding | on |
+| 📶 Wi-Fi | toggle | Wi-Fi power (device auto-detected) | deactivated |
+| 🌐 Local HTTP Server | daemon | `python3 -m http.server` with port + directory parameters | deactivated |
+| 🛡 Web Proxy | toggle | System HTTP/HTTPS proxy with service / host / port parameters | deactivated |
 
-把脚本放进 `~/.config/open-toggle/switches/`（首次运行自动创建并写入两个示例），元数据写在注释头里（前 40 行内）：
+Deactivated switches stay out of the menu bar until you enable them (eye icon in the script manager sidebar). Create your own via **Manage Scripts**, or drop a script into the directory and hit reload.
 
-```bash
-#!/bin/bash
-# <switch.name> My Switch      # 必填，显示名
-# <switch.icon> 🚀             # 可选，emoji
-# <switch.type> toggle         # toggle（默认）| daemon
+## Script Contract
+
+A switch is a single executable script in `~/.config/open-toggle/switches/`, carrying metadata as `# <switch.*>` directive comments within the first 40 lines.
+
+### Directives
+
+| Directive | Required | Description |
+|---|---|---|
+| `<switch.name>` | yes | Display name |
+| `<switch.icon>` | no | Emoji, or SF Symbols name prefixed `sf:` (e.g. `sf:cup.and.saucer.fill`) |
+| `<switch.type>` | no | `toggle` (default) or `daemon` |
+| `<switch.param>` | no | One parameter per line; see below |
+| `<switch.menubar>` | no | Menu bar presence while on; see below |
+
+### Invocation protocol
+
+**`toggle`** — imperative, for idempotent operations:
+
+```
+<script> on       # turn on
+<script> off      # turn off
+<script> status   # print "on" or "off" to stdout; polled every 5 s
 ```
 
-两类形态：
+A non-zero exit code from `status` marks the state *unknown*; a non-zero exit from `on`/`off` marks it *error*.
 
-- **`toggle`（命令式）**：app 调 `script on` / `script off` / `script status`；`status` 输出 `on` 或 `off`，app 每 5 秒轮询一次。
-- **`daemon`（常驻进程）**：app 以 `script run` 启动并持有进程，关 = SIGTERM；状态 = 进程是否存活。脚本里用 `exec` 顶替 shell，让信号直达（见 `keep-awake.sh`）。daemon 自然退出（exit 0，如 `caffeinate -t` 到时）视为正常关闭，开关自动归位；非零退出亮红灯。
+**`daemon`** — long-running foreground process:
 
-状态灯：🟢 on · ⚪ off · 🔴 error（daemon 意外退出 / 命令失败）· 🟠 unknown。
-
-开关的期望状态存在 `UserDefaults`，app 重启时自动恢复（daemon 重新拉起；toggle 先查 `status`，已经是 on 就不重复执行）。
-
-### 参数（`<switch.param>`）
-
-开关行右侧的 ⌄ 可展开参数区，支持三种控件；参数值以**环境变量**注入脚本（`SWITCH_<KEY大写>`），开关开着时修改会立即重启/重跑生效：
-
-```bash
-# <switch.param> key=mode type=select label=模式 default=d options="仅保持屏幕=d|仅保持任务=is|屏幕与任务=dis"
-# <switch.param> key=duration type=number label=时长(分钟) default=0 min=0 max=1440 hint="0 = 一直保持"
-# <switch.param> key=note type=text label=备注 hint="随便写"
+```
+<script> run      # spawned and held by the app
 ```
 
-- `type=select`：下拉框，`options="标签=值|标签=值"`
-- `type=number`：数字输入 + 步进器，可加 `min=` / `max=`
-- `type=text`：自由填写框
-- `presets="1小时=60|2小时=120"`（number/text 可选）：渲染成一排**快捷按钮**，点一下直接填值，与输入框并存、当前命中的高亮
-- 值含空格用双引号包住；`hint=` 会显示为提示/tooltip
+Off sends SIGTERM. Use `exec` so the signal reaches your process directly. Exit 0 is treated as natural completion and resets the switch; a non-zero exit marks it *error*.
 
-### 菜单栏图标（`<switch.menubar>`）
+### Parameters
 
-开关**开启时**可以在菜单栏额外露出存在感：
+```bash
+# <switch.param> key=mode type=select label=Mode default=d options="Display only=d|Display & system=dis"
+# <switch.param> key=duration type=number label="Duration (min)" default=0 min=0 max=1440 presets="Unlimited=0|1 h=60|2 h=120"
+# <switch.param> key=note type=text label=Note hint="free text"
+```
+
+| Attribute | Applies to | Description |
+|---|---|---|
+| `key` | all | Identifier; injected as `SWITCH_<KEY>` (uppercased, non-alphanumerics → `_`) |
+| `type` | all | `select` \| `number` \| `text` |
+| `label` | all | Display label in the panel |
+| `default` | all | Initial value; for `select`, defaults to the first option's value |
+| `options` | select | `label=value` pairs separated by `\|` |
+| `presets` | number, text | Quick-pick buttons, same `label=value\|…` format; coexist with the input field |
+| `min` / `max` | number | Inclusive bounds |
+| `hint` | all | Placeholder (text) or tooltip (others) |
+
+Quote any attribute value containing spaces. Values are injected as environment variables on every invocation; changing a parameter while a switch is on restarts it with the new environment.
+
+### Menu bar presence
 
 ```bash
 # <switch.menubar> mode=add icon=☕️ countdown=on
 ```
 
-- `mode=add`：新增一个独立菜单栏图标（点击可直接关闭该开关）；`mode=replace`：临时替换 app 主图标
-- `icon=`：emoji（`☕️`）或 SF Symbols（`sf:cup.and.saucer.fill`）
-- `countdown=on`：图标旁显示倒计时（要求有一个 `key=duration` 的 number 参数，单位分钟，0=无限）
+- `mode=add` — dedicated status item while on; its menu offers a direct turn-off action
+- `mode=replace` — temporarily replaces the app's own menu bar icon
+- `icon` — emoji or `sf:<symbol-name>`
+- `countdown=on` — shows remaining time (refreshed every second); requires a `number` parameter with key `duration` in minutes, where `0` means unlimited
 
-### 脚本管理窗口
+### Execution details
 
-面板底部「管理脚本」打开管理窗口：**侧边栏列出全部开关**（状态点 + 图标 + 类型），选中即可修改，右键可删除（移到废纸篓，开着的会先关掉）；左下角「＋」新建。
+- Scripts are `chmod 755` on save; files without the executable bit fall back to `/bin/sh`
+- State model: `on` / `off` / `error` / `unknown`
+- Desired states persist in `UserDefaults` and are re-applied at launch: daemons re-spawn; toggles check `status` first and only run `on` if needed
+- All held daemon processes are terminated when the app quits
+- Saving a script whose switch is currently on restarts it with the new content
 
-编辑器分两栏：左边表单配置元数据（名称、**图标选择器**——emoji 网格 / SF Symbols 网格 / 自定义，不用手打 `sf:xxx`、类型、参数、菜单栏行为），右边是**脚本文件视图**——上半部分是表单实时生成的契约头（只读，注释绿高亮），下半部分是深色等宽的**代码编辑区**，直接写脚本体；可用的 `$SWITCH_*` 环境变量以胶囊提示列在顶部。保存时契约头 + 脚本体合成完整文件写回；**正在运行的开关保存后立即用新内容热重启**。手写的脚本也能无损往返编辑（只接管契约行，其余内容原样保留）。
-
-## 内置示例
-
-| 开关 | 形态 | 做什么 |
-|------|------|--------|
-| ☕️ Keep Awake | daemon | `caffeinate`，三模式下拉（仅屏幕 / 仅任务 / 屏幕与任务）+ 时长参数；开启时菜单栏多一个 ☕️ + 倒计时 |
-| 👁️ Show Hidden Files | toggle | Finder 显示/隐藏隐藏文件（会重启 Finder） |
-
-> Keep Awake 的"仅保持任务/屏幕与任务"用了 `caffeinate -s`（防合盖睡眠），只在接电源时有效——这是 macOS 的限制。
-
-两个都零权限。规划里的 Keyboard Jiggler（需 Accessibility 授权）留到原生 app bundle 阶段再加。
-
-## 代码结构
+## Architecture
 
 ```
 Sources/OpenToggle/
-├── OpenToggleApp.swift        # MenuBarExtra 入口（主图标可被 replace 模式覆盖）+ 编辑器窗口 + 退出清理
-├── MenuView.swift             # 面板 UI：状态灯 + Toggle + 可展开的参数区（下拉/数字/填写框）
-├── ManagerView.swift          # 脚本管理窗口：侧边栏（增删改）+ 表单 + 代码编辑区
-├── IconPicker.swift           # 图标选择器（emoji / SF Symbols 网格）+ IconView 渲染
-├── StatusBarController.swift  # 脚本声明的额外菜单栏图标（emoji/SF Symbol + 倒计时 + 点击关闭）
-├── SwitchModel.swift          # 注释头契约解析（name/icon/type/param/menubar）
-├── SwitchManager.swift        # 目录扫描 + 进程生命周期 + 参数注入/热重启 + 轮询 + 持久化
-├── ScriptRunner.swift         # Process 封装（短命令 / daemon spawn，环境变量注入）
-└── ExampleScripts.swift       # 首次运行写入的示例脚本
+├── OpenToggleApp.swift        # MenuBarExtra entry, manager window, termination guards
+├── MenuView.swift             # Panel: status lights, toggles, expandable parameter controls
+├── ManagerView.swift          # Manager window: sidebar CRUD, metadata form, code editor
+├── IconPicker.swift           # Emoji / SF Symbols picker grids
+├── StatusBarController.swift  # Script-declared status items (icon + countdown + menu)
+├── SwitchModel.swift          # Contract parsing (directives, params, menubar)
+├── SwitchManager.swift        # Registry, process lifecycle, polling, persistence
+├── ScriptRunner.swift         # Process wrapper (commands / daemon spawn, env injection)
+├── Localization.swift         # Runtime-switchable string tables (en, zh-Hans)
+└── ExampleScripts.swift       # Seeded example switches
 ```
+
+## Roadmap
+
+- App bundle packaging, notarization, Homebrew cask
+- Accessibility-dependent examples (keyboard jiggler via CGEvent)
+- Manifest-style contract (TOML) as an alternative to comment headers
+- Scheduling, conditional triggers, switch dependencies
+
+## License
+
+MIT

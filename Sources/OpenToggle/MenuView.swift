@@ -3,6 +3,7 @@ import AppKit
 
 struct MenuView: View {
     @ObservedObject var manager: SwitchManager
+    @ObservedObject private var loc = Loc.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -13,14 +14,14 @@ struct MenuView: View {
                 .padding(.vertical, 10)
             Divider()
 
-            if manager.switches.isEmpty {
-                Text("没有找到开关脚本\n点下方「管理脚本」新建一个")
+            if manager.visibleSwitches.isEmpty {
+                Text(loc.s.panelEmpty)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(12)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(manager.switches) { sw in
+                    ForEach(manager.visibleSwitches) { sw in
                         SwitchRow(manager: manager, script: sw)
                     }
                 }
@@ -33,17 +34,17 @@ struct MenuView: View {
                     openWindow(id: "manager")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
-                    Label("管理脚本", systemImage: "slider.horizontal.3")
+                    Label(loc.s.manageScripts, systemImage: "slider.horizontal.3")
                 }
-                .help("新建、修改、删除开关脚本")
+                .help(loc.s.manageScriptsHelp)
                 Button {
                     manager.reload()
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("重新扫描脚本目录")
+                .help(loc.s.reloadHelp)
                 Spacer()
-                Button("退出") {
+                Button(loc.s.quit) {
                     NSApp.terminate(nil)
                 }
             }
@@ -61,6 +62,7 @@ struct MenuView: View {
 private struct SwitchRow: View {
     @ObservedObject var manager: SwitchManager
     let script: SwitchScript
+    @ObservedObject private var loc = Loc.shared
     @State private var expanded = false
 
     private var state: SwitchState { manager.states[script.id] ?? .unknown }
@@ -91,7 +93,6 @@ private struct SwitchRow: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
-                    .help("配置参数")
                 }
                 Toggle("", isOn: Binding(
                     get: { state == .on },
@@ -105,12 +106,12 @@ private struct SwitchRow: View {
             .padding(.vertical, 5)
             .contentShape(Rectangle())
             .contextMenu {
-                Button("编辑脚本文件") { NSWorkspace.shared.open(script.url) }
-                Button("在 Finder 中显示") {
+                Button(loc.s.editScriptFile) { NSWorkspace.shared.open(script.url) }
+                Button(loc.s.revealInFinder) {
                     NSWorkspace.shared.activateFileViewerSelecting([script.url])
                 }
             }
-            .help(script.type == .daemon ? "daemon 型：app 持有常驻进程" : "命令式 toggle：on/off/status")
+            .help(script.type == .daemon ? loc.s.daemonRowHelp : loc.s.toggleRowHelp)
 
             if expanded {
                 VStack(alignment: .leading, spacing: 8) {
@@ -118,7 +119,7 @@ private struct SwitchRow: View {
                         ParamControl(manager: manager, script: script, param: param)
                     }
                     if state == .on {
-                        Text("开关开启中，修改立即生效")
+                        Text(loc.s.paramLiveNote)
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -140,7 +141,7 @@ private struct SwitchRow: View {
     }
 }
 
-// MARK: - 参数控件（select / number / text）
+// MARK: - 参数控件（select / number / text + 快捷按钮）
 
 private struct ParamControl: View {
     @ObservedObject var manager: SwitchManager

@@ -44,6 +44,7 @@ private struct IconPickerPopover: View {
     @Binding var icon: String
     let dismiss: () -> Void
 
+    @ObservedObject private var loc = Loc.shared
     @State private var tab = 0
     @State private var custom = ""
 
@@ -52,9 +53,9 @@ private struct IconPickerPopover: View {
     var body: some View {
         VStack(spacing: 10) {
             Picker("", selection: $tab) {
-                Text("Emoji").tag(0)
-                Text("图标").tag(1)
-                Text("自定义").tag(2)
+                Text(loc.s.tabEmoji).tag(0)
+                Text(loc.s.tabSymbols).tag(1)
+                Text(loc.s.tabCustom).tag(2)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -70,18 +71,18 @@ private struct IconPickerPopover: View {
                 }
             default:
                 VStack(alignment: .leading, spacing: 8) {
-                    TextField("emoji 或 SF Symbol 名（如 cup.and.saucer）", text: $custom)
+                    TextField(loc.s.customPlaceholder, text: $custom)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit { applyCustom() }
                     HStack {
-                        Text("预览：")
+                        Text(loc.s.previewLabel)
                             .foregroundStyle(.secondary)
                         IconView(icon: normalizedCustom).font(.title2)
                         Spacer()
-                        Button("使用") { applyCustom() }
+                        Button(loc.s.useButton) { applyCustom() }
                             .disabled(custom.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    Text("SF Symbol 名可在系统「SF Symbols」app 里查")
+                    Text(loc.s.sfNote)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                     Spacer()

@@ -42,7 +42,7 @@ final class StatusBarController: NSObject {
             title += (title.isEmpty ? "" : " ") + formatCountdown(remaining)
         }
         button.title = title
-        button.toolTip = "\(sw.name)（OpenToggle）"
+        button.toolTip = "\(sw.name) — OpenToggle"
 
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -50,7 +50,11 @@ final class StatusBarController: NSObject {
         info.isEnabled = false
         menu.addItem(info)
         menu.addItem(.separator())
-        let off = NSMenuItem(title: "关闭「\(sw.name)」", action: #selector(turnOff(_:)), keyEquivalent: "")
+        let off = NSMenuItem(
+            title: String(format: Loc.shared.s.turnOffFormat, sw.name),
+            action: #selector(turnOff(_:)),
+            keyEquivalent: ""
+        )
         off.target = self
         off.representedObject = sw.id
         menu.addItem(off)
