@@ -59,6 +59,8 @@ A switch icon appears in the menu bar. First launch seeds a library of ready-to-
 
 Deactivated switches stay out of the menu bar until you enable them (eye icon in the script manager sidebar). Create your own via **Manage Scripts**, or drop a script into the directory and hit reload.
 
+The preset scripts live in [`Sources/OpenToggle/Switches/`](Sources/OpenToggle/Switches/) as plain `.sh` files (bundled as SwiftPM resources at build time) — browse them as contract examples, or copy one into your scripts directory as a starting point.
+
 ## Script Contract
 
 A switch is a single executable script in `~/.config/open-toggle/switches/`, carrying metadata as `# <switch.*>` directive comments within the first 40 lines.
@@ -146,7 +148,8 @@ Sources/OpenToggle/
 ├── SwitchManager.swift        # Registry, process lifecycle, polling, persistence
 ├── ScriptRunner.swift         # Process wrapper (commands / daemon spawn, env injection)
 ├── Localization.swift         # Runtime-switchable string tables (en, zh-Hans)
-└── ExampleScripts.swift       # Seeded example switches
+├── ExampleScripts.swift       # Preset library manifest (loads from bundle resources)
+└── Switches/                  # Preset switch scripts (.sh), bundled as resources
 ```
 
 ## Roadmap

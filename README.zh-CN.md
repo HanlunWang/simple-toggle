@@ -59,6 +59,8 @@ swift run
 
 停用的开关不出现在菜单栏，在脚本管理器侧边栏点眼睛图标即可启用。也可通过「管理脚本」新建，或直接把脚本放进目录后重新加载。
 
+预制脚本以纯 `.sh` 文件形式放在 [`Sources/OpenToggle/Switches/`](Sources/OpenToggle/Switches/)（构建时作为 SwiftPM 资源打包）——可直接浏览作为契约示例，或复制一份到脚本目录作为起点。
+
 ## 脚本契约
 
 一个开关 = `~/.config/open-toggle/switches/` 下的一个可执行脚本，元数据以 `# <switch.*>` 指令注释声明（前 40 行内）。
@@ -146,7 +148,8 @@ Sources/OpenToggle/
 ├── SwitchManager.swift        # 注册表、进程生命周期、轮询、持久化
 ├── ScriptRunner.swift         # Process 封装（命令 / daemon spawn、环境注入）
 ├── Localization.swift         # 运行时可切换的字符串表（en、zh-Hans）
-└── ExampleScripts.swift       # 示例开关种子
+├── ExampleScripts.swift       # 预制库清单（从 bundle 资源加载）
+└── Switches/                  # 预制开关脚本（.sh），构建时打包为资源
 ```
 
 ## 路线图

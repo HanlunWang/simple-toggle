@@ -5,6 +5,12 @@ let package = Package(
     name: "OpenToggle",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "OpenToggle", path: "Sources/OpenToggle")
+        .executableTarget(
+            name: "OpenToggle",
+            path: "Sources/OpenToggle",
+            resources: [
+                .copy("Switches") // 预制脚本库，seeding 时安装到用户脚本目录
+            ]
+        )
     ]
 )
