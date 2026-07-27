@@ -8,7 +8,7 @@ enum ScriptRunner {
         let output: String
     }
 
-    static func run(_ url: URL, argument: String) -> Result {
+    static func run(_ url: URL, argument: String, environment: [String: String] = [:]) -> Result {
         let process = Process()
         // 脚本自带 shebang 时直接执行；没有可执行位则退回 /bin/sh
         if FileManager.default.isExecutableFile(atPath: url.path) {
@@ -17,6 +17,10 @@ enum ScriptRunner {
         } else {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [url.path, argument]
+        }
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment
+                .merging(environment) { _, new in new }
         }
         let stdout = Pipe()
         process.standardOutput = stdout
@@ -34,7 +38,7 @@ enum ScriptRunner {
     }
 
     /// 启动 daemon 型脚本（`script run`），返回持有的进程，不等待退出。
-    static func spawnDaemon(_ url: URL) -> Process? {
+    static func spawnDaemon(_ url: URL, environment: [String: String] = [:]) -> Process? {
         let process = Process()
         if FileManager.default.isExecutableFile(atPath: url.path) {
             process.executableURL = url
@@ -42,6 +46,10 @@ enum ScriptRunner {
         } else {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [url.path, "run"]
+        }
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment
+                .merging(environment) { _, new in new }
         }
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice

@@ -13,10 +13,19 @@ enum ExampleScripts {
     # <switch.name> Keep Awake
     # <switch.icon> ☕️
     # <switch.type> daemon
+    # <switch.param> key=mode type=select label=模式 default=d options="仅保持屏幕=d|仅保持任务=is|屏幕与任务=dis"
+    # <switch.param> key=duration type=number label=时长(分钟) default=0 min=0 max=1440 hint="0 = 一直保持"
+    # <switch.menubar> mode=add icon=☕️ countdown=on
     #
     # daemon 契约：app 以 `script run` 启动并持有本进程；关 = 收到 SIGTERM。
-    # exec 让 caffeinate 直接顶替本 shell，SIGTERM 能直达。
-    exec caffeinate -d
+    # 参数以环境变量注入：$SWITCH_MODE / $SWITCH_DURATION
+    # caffeinate: -d 防屏幕睡眠 / -i 防系统空闲睡眠 / -s 防合盖睡眠(仅接电源时有效)
+    ARGS="-${SWITCH_MODE:-d}"
+    if [ "${SWITCH_DURATION:-0}" -gt 0 ]; then
+      ARGS="$ARGS -t $((SWITCH_DURATION * 60))"
+    fi
+    # exec 让 caffeinate 直接顶替本 shell，SIGTERM 能直达；-t 到时自然退出，app 会把开关归位
+    exec caffeinate $ARGS
     """
 
     private static let hiddenFiles = """
