@@ -48,6 +48,8 @@ final class SwitchManager: ObservableObject {
         pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshStates() }
         }
+        // 本地控制 API：CLI / MCP / 第三方 AI 工具的接入点
+        ControlServer.shared.start()
     }
 
     /// app 退出时清理所有持有的 daemon，避免孤儿进程

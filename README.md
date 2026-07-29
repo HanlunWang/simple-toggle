@@ -135,10 +135,55 @@ Quote any attribute value containing spaces. Values are injected as environment 
 - All held daemon processes are terminated when the app quits
 - Saving a script whose switch is currently on restarts it with the new content
 
+## CLI
+
+The same binary doubles as a CLI: any argument switches it to command-line mode (the GUI app must be running for everything except `validate`). Symlink it for convenience:
+
+```bash
+swift build && ln -sf "$(pwd)/.build/debug/OpenToggle" /usr/local/bin/opentoggle
+```
+
+```
+opentoggle list                    # switches with state
+opentoggle on|off <id>             # toggle a switch
+opentoggle state <id>              # on | off | error | unknown
+opentoggle params <id>             # parameters and current values
+opentoggle set <id> k=v [...]      # set parameters (restarts a running switch)
+opentoggle enable|disable <id>     # show/hide in the menu bar
+opentoggle cat <id>                # print script source
+opentoggle add <file.sh>           # validate + install a new switch
+opentoggle put <id> <file.sh>      # validate + replace a switch's script
+opentoggle rm <id>                 # delete (moves to Trash)
+opentoggle validate <file.sh>      # offline contract lint
+opentoggle mcp                     # MCP stdio server
+```
+
+`--json` gives machine-readable output. Every script submission (CLI, API, or MCP) is linted against the contract: errors reject the submission, warnings are returned alongside.
+
+## AI Integration
+
+OpenToggle is built to be driven by AI agents:
+
+- **Local control API** — the app serves `127.0.0.1:43737` (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …). Discovery file: `~/.config/open-toggle/api.json`.
+- **MCP server** — `opentoggle mcp` speaks MCP over stdio with tools for listing, toggling, parameter setting, and validated script authoring:
+
+  ```bash
+  claude mcp add opentoggle -- /usr/local/bin/opentoggle mcp
+  ```
+
+- **Claude Code skill** — [`skills/opentoggle/`](skills/opentoggle/) teaches agents the CLI and the authoring workflow (write → `validate` → `add`/`put` → verify):
+
+  ```bash
+  ln -s "$(pwd)/skills/opentoggle" ~/.claude/skills/opentoggle
+  ```
+
+The contract linter is the safety net in all three paths: an AI-authored script that violates the contract is rejected with structured, fixable error messages.
+
 ## Architecture
 
 ```
 Sources/OpenToggle/
+├── Main.swift                 # Entry: args → CLI mode, no args → GUI
 ├── OpenToggleApp.swift        # MenuBarExtra entry, manager window, termination guards
 ├── MenuView.swift             # Panel: status lights, toggles, expandable parameter controls
 ├── ManagerView.swift          # Manager window: sidebar CRUD, metadata form, code editor
@@ -147,6 +192,10 @@ Sources/OpenToggle/
 ├── SwitchModel.swift          # Contract parsing (directives, params, menubar)
 ├── SwitchManager.swift        # Registry, process lifecycle, polling, persistence
 ├── ScriptRunner.swift         # Process wrapper (commands / daemon spawn, env injection)
+├── ControlServer.swift        # Local HTTP control API (127.0.0.1:43737)
+├── ContractLinter.swift       # Static contract checks for all submission paths
+├── CLI.swift                  # Command-line client over the control API
+├── MCPServer.swift            # MCP stdio server (`opentoggle mcp`)
 ├── Localization.swift         # Runtime-switchable string tables (en, zh-Hans)
 ├── ExampleScripts.swift       # Preset library manifest (loads from bundle resources)
 └── Switches/                  # Preset switch scripts (.sh), bundled as resources

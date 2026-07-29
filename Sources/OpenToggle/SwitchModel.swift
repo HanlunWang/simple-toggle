@@ -142,7 +142,7 @@ struct SwitchScript: Identifiable, Equatable {
     }
 
     /// "标签=值|标签=值" → [ParamOption]（用于 options 和 presets）
-    private static func parseOptions(_ raw: String?) -> [ParamOption] {
+    static func parseOptions(_ raw: String?) -> [ParamOption] {
         (raw ?? "")
             .split(separator: "|")
             .compactMap { part in
@@ -166,7 +166,7 @@ struct SwitchScript: Identifiable, Equatable {
     }
 
     /// 把 `key=value key2="value with spaces"` 解析成字典（双引号内的空格不分词）
-    private static func tokenizePairs(_ s: String) -> [String: String] {
+    static func tokenizePairs(_ s: String) -> [String: String] {
         var tokens: [String] = []
         var current = ""
         var inQuotes = false

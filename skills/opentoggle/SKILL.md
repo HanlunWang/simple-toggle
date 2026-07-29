@@ -1,0 +1,72 @@
+---
+name: opentoggle
+description: Control OpenToggle (macOS menu bar switch manager) and author switch scripts. Use when the user asks to turn switches on/off, adjust switch parameters, or create/edit an OpenToggle switch script (keep awake, proxy, any script-backed toggle). Scripts must follow the OpenToggle contract and pass `opentoggle validate`.
+---
+
+# OpenToggle
+
+OpenToggle renders user scripts as managed menu bar switches on macOS. You interact with it through the `opentoggle` CLI (the OpenToggle binary invoked with arguments; commonly aliased as `opentoggle`, or run via the built product at `.build/debug/OpenToggle` in the repo). The GUI app must be running for every command except `validate`.
+
+An MCP server is also available (`opentoggle mcp`), exposing the same operations as tools; prefer the CLI when running in a shell.
+
+## Operating switches
+
+```bash
+opentoggle list                      # all switches: state (on/off/error/unknown), type, enabled
+opentoggle on keep-awake             # .sh suffix optional
+opentoggle off keep-awake
+opentoggle state keep-awake          # prints just the state
+opentoggle params keep-awake         # parameter keys, current values, options
+opentoggle set keep-awake mode=dis duration=120   # restarts a running switch with new values
+opentoggle enable wifi               # show in menu bar
+opentoggle disable wifi              # hide from menu bar (script kept)
+opentoggle cat keep-awake            # print script source
+opentoggle rm my-switch              # delete (moves script to Trash)
+```
+
+Add `--json` to `list`/`params`/mutation commands for machine-readable output.
+
+## Authoring switch scripts
+
+A switch is one executable script carrying metadata as `# <switch.*>` directive comments in its first 40 lines.
+
+### Workflow (always follow this)
+
+1. Write the script to a temp file.
+2. `opentoggle validate <file>` — fix every **error**; address warnings when reasonable.
+3. Install: `opentoggle add <file>` (new switch; file name derives from `<switch.name>`) or `opentoggle put <id> <file>` (replace existing). Both lint again server-side and reject on errors.
+4. Verify: `opentoggle list`, then `opentoggle on <id>` and `opentoggle state <id>`.
+
+### Contract
+
+```bash
+#!/bin/bash
+# <switch.name> My Switch                    # required: display name
+# <switch.icon> ☕️                           # emoji or sf:<sf-symbol-name>
+# <switch.type> toggle                       # toggle (default) | daemon
+# <switch.param> key=mode type=select label=Mode default=a options="Label A=a|Label B=b"
+# <switch.param> key=duration type=number label="Duration (min)" default=0 min=0 max=1440 presets="Unlimited=0|1 h=60"
+# <switch.param> key=note type=text label=Note hint="placeholder text"
+# <switch.menubar> mode=add icon=☕️ countdown=on
+```
+
+**toggle** (imperative, idempotent operations): invoked as `<script> on`, `<script> off`, `<script> status`. `status` must print `on` or `off` to stdout; it is polled every 5 s. Non-zero exit from `status` → state *unknown*; from `on`/`off` → *error*.
+
+**daemon** (long-running): invoked as `<script> run`. Start the foreground process with `exec` so SIGTERM reaches it. Exit 0 = natural completion (switch resets); non-zero = *error*.
+
+**Parameters** are injected as environment variables on every invocation: `key=mode` → `$SWITCH_MODE` (uppercase, non-alphanumerics become `_`). `options`/`presets` use `label=value|label=value`; quote attribute values containing spaces. `presets` renders quick-pick buttons for number/text params.
+
+**Menu bar**: `mode=add` shows a dedicated status item while on; `mode=replace` swaps the app icon. `countdown=on` requires a number param with `key=duration` (minutes, 0 = unlimited).
+
+Scripts are `chmod 755` on install. Saving over a running switch restarts it with the new content.
+
+### Conventions
+
+- Prefer zero-permission mechanisms (`defaults`, `caffeinate`, `networksetup`, `osascript` volume). Note in a comment when a script triggers a permission prompt (e.g. System Events automation).
+- Keep `status` fast (<1 s) and side-effect free.
+- For daemons, never wrap the long-running process in a loop without `exec`ing it, unless the loop itself is the process.
+- Reference examples live in `Sources/OpenToggle/Switches/` of the repo.
+
+## HTTP API (advanced)
+
+The app serves a local control API on `127.0.0.1:43737` (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …). The CLI is a thin client over it; use the API directly only when the CLI is unavailable.

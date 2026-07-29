@@ -135,10 +135,55 @@ swift run
 - app 退出时统一终止持有的 daemon 进程
 - 保存正在运行的开关的脚本后，会以新内容立即重启
 
+## CLI
+
+同一个二进制兼作 CLI：带任何参数即进入命令行模式（除 `validate` 外都需要 GUI app 在运行）。建议做个软链：
+
+```bash
+swift build && ln -sf "$(pwd)/.build/debug/OpenToggle" /usr/local/bin/opentoggle
+```
+
+```
+opentoggle list                    # 开关列表与状态
+opentoggle on|off <id>             # 开/关
+opentoggle state <id>              # on | off | error | unknown
+opentoggle params <id>             # 参数与当前值
+opentoggle set <id> k=v [...]      # 设参数（运行中的开关热重启）
+opentoggle enable|disable <id>     # 菜单栏显示/隐藏
+opentoggle cat <id>                # 打印脚本源码
+opentoggle add <file.sh>           # 校验 + 安装新开关
+opentoggle put <id> <file.sh>      # 校验 + 替换已有开关脚本
+opentoggle rm <id>                 # 删除（移到废纸篓）
+opentoggle validate <file.sh>      # 离线契约检查
+opentoggle mcp                     # MCP stdio server
+```
+
+`--json` 输出机器可读格式。所有脚本提交路径（CLI / API / MCP）都会过契约 linter：error 拒收，warning 随响应返回。
+
+## AI 接入
+
+OpenToggle 为 AI agent 操作而设计：
+
+- **本地控制 API** —— app 在 `127.0.0.1:43737` 提供 REST 接口（`GET /v1/switches`、`POST /v1/switches/{id}/on`、`PUT /v1/switches/{id}/script`、`POST /v1/scripts`、`POST /v1/validate` 等）。发现文件：`~/.config/open-toggle/api.json`。
+- **MCP server** —— `opentoggle mcp` 以 stdio 提供 MCP 工具（列表、开关、设参、带校验的脚本写入）：
+
+  ```bash
+  claude mcp add opentoggle -- /usr/local/bin/opentoggle mcp
+  ```
+
+- **Claude Code skill** —— [`skills/opentoggle/`](skills/opentoggle/) 向 agent 传授 CLI 与脚本创作工作流（写 → `validate` → `add`/`put` → 验证）：
+
+  ```bash
+  ln -s "$(pwd)/skills/opentoggle" ~/.claude/skills/opentoggle
+  ```
+
+三条路径共用同一个契约 linter 作为安全网：AI 写出的不合规脚本会被拒收，并返回结构化、可修复的错误信息。
+
 ## 架构
 
 ```
 Sources/OpenToggle/
+├── Main.swift                 # 入口：带参数 → CLI，无参数 → GUI
 ├── OpenToggleApp.swift        # MenuBarExtra 入口、管理窗口、退出拦截
 ├── MenuView.swift             # 面板：状态灯、Toggle、可展开参数控件
 ├── ManagerView.swift          # 管理窗口：侧边栏增删改、元数据表单、代码编辑器
@@ -147,6 +192,10 @@ Sources/OpenToggle/
 ├── SwitchModel.swift          # 契约解析（指令、参数、菜单栏）
 ├── SwitchManager.swift        # 注册表、进程生命周期、轮询、持久化
 ├── ScriptRunner.swift         # Process 封装（命令 / daemon spawn、环境注入）
+├── ControlServer.swift        # 本地 HTTP 控制 API（127.0.0.1:43737）
+├── ContractLinter.swift       # 契约静态检查（所有提交路径共用）
+├── CLI.swift                  # 基于控制 API 的命令行客户端
+├── MCPServer.swift            # MCP stdio server（`opentoggle mcp`）
 ├── Localization.swift         # 运行时可切换的字符串表（en、zh-Hans）
 ├── ExampleScripts.swift       # 预制库清单（从 bundle 资源加载）
 └── Switches/                  # 预制开关脚本（.sh），构建时打包为资源
