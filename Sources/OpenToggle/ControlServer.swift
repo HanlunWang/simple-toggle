@@ -154,7 +154,11 @@ private enum Router {
     typealias Response = (Int, String, Data)
 
     static func route(_ req: HTTPConnection.Request) -> Response {
-        let parts = req.path.split(separator: "?")[0].split(separator: "/").map(String.init)
+        // 客户端用 URL(string:) 构造请求，非 ASCII 的 id（如中文名）会被 percent-encode，
+        // 这里必须解码回来才能匹配上 switch。先按 "/" 切分再逐段解码——反过来会让
+        // 编码进 id 的 %2F 变成路径分隔符。
+        let parts = req.path.split(separator: "?")[0].split(separator: "/")
+            .map { String($0).removingPercentEncoding ?? String($0) }
         let manager = SwitchManager.shared
 
         switch (req.method, parts.count) {
