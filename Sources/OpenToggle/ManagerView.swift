@@ -778,6 +778,7 @@ private struct ParamDraftRow: View {
                         Text(s.ptSelect).tag(ParamType.select)
                         Text(s.ptNumber).tag(ParamType.number)
                         Text(s.ptText).tag(ParamType.text)
+                        Text(s.ptKey).tag(ParamType.key)
                     }
                     .labelsHidden()
                     .fixedSize()
@@ -847,6 +848,16 @@ private struct ParamDraftRow: View {
                     TextField("Corp proxy=http://proxy:8080|Direct=", text: $param.presets)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.callout, design: .monospaced))
+                }
+            case .key:
+                HStack(alignment: .bottom, spacing: 10) {
+                    FieldColumn(s.defaultLabel, detail: s.keyParamHelp) {
+                        KeyPickerButton(value: $param.defaultValue)
+                    }
+                    FieldColumn(s.hintLabel, detail: s.hintHelp) {
+                        TextField("", text: $param.hint)
+                            .textFieldStyle(.roundedBorder)
+                    }
                 }
             }
         }

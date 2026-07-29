@@ -178,6 +178,8 @@ private struct ParamControl: View {
                     TextField(param.hint ?? "", text: binding)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 140)
+                case .key:
+                    KeyPickerButton(value: binding)
                 }
             }
             if !param.presets.isEmpty {

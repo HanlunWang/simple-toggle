@@ -82,7 +82,7 @@ enum ContractLinter {
             }
             let ptype = ParamType(rawValue: spec["type"] ?? "text")
             if spec["type"] != nil, ptype == nil {
-                error("\(where_): invalid type \"\(spec["type"]!)\"; expected select | number | text")
+                error("\(where_): invalid type \"\(spec["type"]!)\"; expected select | number | text | key")
             }
             switch ptype ?? .text {
             case .select:
@@ -102,6 +102,10 @@ enum ContractLinter {
                 if let minV, let maxV, minV > maxV { error("\(where_): min (\(minV)) > max (\(maxV))") }
                 if let def = spec["default"], !def.isEmpty, Int(def) == nil {
                     warning("\(where_): default \"\(def)\" is not an integer")
+                }
+            case .key:
+                if let def = spec["default"], !def.isEmpty, KeySpec.parse(def) == nil {
+                    error("\(where_): default \"\(def)\" is not a valid key spec (expected e.g. f15, cmd+shift+k, mouse:middle)")
                 }
             case .text:
                 break
@@ -145,8 +149,11 @@ enum ContractLinter {
                     warning("toggle script body does not reference \"status\"; the app polls `<script> status` every 5 s and expects \"on\"/\"off\" on stdout")
                 }
             case .daemon:
-                if !body.contains("exec") {
-                    warning("daemon script body does not use `exec`; SIGTERM may hit the wrapper shell instead of your process")
+                // exec 或 trap TERM 二选一都能保证 SIGTERM 及时生效
+                let handlesTerm = body.range(of: #"trap\b.*\b(SIG)?(TERM|INT)\b"#,
+                                             options: .regularExpression) != nil
+                if !body.contains("exec") && !handlesTerm {
+                    warning("daemon script body neither uses `exec` nor traps TERM; SIGTERM may hit the wrapper shell instead of your process")
                 }
             }
         }

@@ -29,6 +29,7 @@ enum ParamType: String {
     case select // 下拉选择
     case number // 数字（步进器）
     case text   // 自由填写
+    case key    // 按键（KeySpec 规范字符串，脚本用 `opentoggle press` 发送）
 }
 
 struct ParamOption: Equatable, Hashable {

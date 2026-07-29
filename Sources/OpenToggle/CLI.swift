@@ -30,6 +30,19 @@ enum CLI {
         case "mcp":
             MCPServer.run() // never returns
 
+        case "press":
+            // 离线可用：合成键盘/鼠标事件（脚本里配合 key 型参数使用）
+            guard let specString = rest.first else {
+                fail("usage: opentoggle press <keyspec>   e.g. f15, cmd+shift+k, mouse:middle")
+            }
+            guard let spec = KeySpec.parse(specString) else {
+                fail("invalid key spec \"\(specString)\" — expected e.g. f15, cmd+shift+k, mouse:middle")
+            }
+            guard KeySpec.checkAccessibility(prompt: true) else {
+                fail("accessibility permission required: System Settings → Privacy & Security → Accessibility → allow OpenToggle")
+            }
+            exit(spec.post() ? 0 : 1)
+
         case "list":
             let data = api("GET", "/v1/switches")
             if jsonMode { printData(data); exit(0) }
@@ -210,10 +223,12 @@ enum CLI {
       put <id> <file.sh>       validate + replace an existing switch's script
       rm <id>                  delete a switch (moves script to Trash)
       validate <file.sh>       lint a script against the contract (offline)
+      press <keyspec>          synthesize a key/mouse event (f15, cmd+shift+k,
+                               mouse:middle); needs Accessibility permission
       mcp                      run as an MCP stdio server (for AI agents)
       version | help
 
     <id> is the script file name (keep-awake.sh; the .sh suffix is optional).
-    All commands except validate/mcp/help require the OpenToggle app running.
+    All commands except validate/press/mcp/help require the OpenToggle app running.
     """
 }

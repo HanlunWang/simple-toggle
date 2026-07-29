@@ -116,6 +116,19 @@ struct S {
     let ptSelect: String
     let ptNumber: String
     let ptText: String
+    let ptKey: String
+    let keyParamHelp: String
+    let chooseKey: String
+    let tabCapture: String
+    let tabCommonKeys: String
+    let tabMouse: String
+    let captureIdle: String
+    let captureActive: String
+    let mouseLeft: String
+    let mouseMiddle: String
+    let mouseRight: String
+    let mouseNote: String
+    let bareKeyWarning: String
     let optionsLabel: String
     let optionsHelp: String
     let defaultLabel: String
@@ -267,12 +280,34 @@ extension S {
         - **Dropdown** — fixed set of options
         - **Number** — numeric field with stepper, bounded by min/max
         - **Text field** — free-form text
+        - **Key** — key/mouse picker (capture, common keys, or mouse buttons); \
+        the value is a key spec such as `f15` or `cmd+shift+k`, and the script \
+        sends it via `"$OPENTOGGLE_BIN" press "$SWITCH_<KEY>"`
 
         All values are injected as strings.
         """,
         ptSelect: "Dropdown",
         ptNumber: "Number",
         ptText: "Text field",
+        ptKey: "Key",
+        keyParamHelp: """
+        Key spec format: `[modifier+]*key` — e.g. `f15`, `cmd+shift+k`, \
+        `mouse:middle`. Modifiers: cmd / shift / opt / ctrl / fn.
+
+        Scripts send the key with `"$OPENTOGGLE_BIN" press "$SWITCH_<KEY>"` \
+        (requires a one-time Accessibility permission grant).
+        """,
+        chooseKey: "Choose Key…",
+        tabCapture: "Capture",
+        tabCommonKeys: "Common",
+        tabMouse: "Mouse",
+        captureIdle: "Click, then press the desired key or combination",
+        captureActive: "Press a key… (click again to cancel)",
+        mouseLeft: "Left Click",
+        mouseMiddle: "Middle Click",
+        mouseRight: "Right Click",
+        mouseNote: "Clicks are sent at the current cursor position.",
+        bareKeyWarning: "A bare character key may interfere with normal typing",
         optionsLabel: "Options",
         optionsHelp: """
         Option set, formatted `label=value`, separated by `|`. Example:
@@ -461,12 +496,33 @@ extension S {
         - **下拉选择** — 固定候选集
         - **数字** — 带边界约束的数字输入 + 步进器
         - **填写框** — 自由文本
+        - **按键** — 按键/鼠标选择器（捕获、常用键、鼠标键）；值为按键规范如 \
+        `f15`、`cmd+shift+k`，脚本用 `"$OPENTOGGLE_BIN" press "$SWITCH_<KEY>"` 发送
 
-        三者的值均以字符串形式注入。
+        所有值均以字符串形式注入。
         """,
         ptSelect: "下拉选择",
         ptNumber: "数字",
         ptText: "填写框",
+        ptKey: "按键",
+        keyParamHelp: """
+        按键规范格式：`[修饰键+]*键名` — 如 `f15`、`cmd+shift+k`、\
+        `mouse:middle`。修饰键：cmd / shift / opt / ctrl / fn。
+
+        脚本用 `"$OPENTOGGLE_BIN" press "$SWITCH_<KEY>"` 发送按键\
+        （需要一次性授予「辅助功能」权限）。
+        """,
+        chooseKey: "选择按键…",
+        tabCapture: "捕获",
+        tabCommonKeys: "常用键",
+        tabMouse: "鼠标",
+        captureIdle: "点击此处，然后按下想要的键或组合键",
+        captureActive: "请按下按键…（再次点击取消）",
+        mouseLeft: "鼠标左键",
+        mouseMiddle: "鼠标中键",
+        mouseRight: "鼠标右键",
+        mouseNote: "点击发送在当前光标位置。",
+        bareKeyWarning: "无修饰键的字符键可能干扰正常输入",
         optionsLabel: "选项",
         optionsHelp: """
         候选集定义，格式 `label=value`，多项以 `|` 分隔。例：

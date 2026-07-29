@@ -106,13 +106,21 @@ swift run
 | 属性 | 适用类型 | 说明 |
 |---|---|---|
 | `key` | 全部 | 标识符；注入为 `SWITCH_<KEY>`（转大写，非字母数字 → `_`） |
-| `type` | 全部 | `select` \| `number` \| `text` |
+| `type` | 全部 | `select` \| `number` \| `text` \| `key` |
 | `label` | 全部 | 面板中的显示标签 |
 | `default` | 全部 | 初始值；`select` 缺省取第一个候选项的 value |
 | `options` | select | `label=value` 对，以 `\|` 分隔 |
 | `presets` | number、text | 快捷按钮，同 `label=value\|…` 格式；与输入框并存 |
 | `min` / `max` | number | 取值边界（含端点） |
 | `hint` | 全部 | 占位符（text）或悬停提示（其他） |
+
+`type=key` 渲染为按键选择器（按下捕获 / 常用键网格 / 鼠标键）。值为按键规范——`f15`、`cmd+shift+k`、`mouse:middle`——脚本用内置合成器发送：
+
+```bash
+"${OPENTOGGLE_BIN:-opentoggle}" press "$SWITCH_NUDGE"   # OPENTOGGLE_BIN 已注入每个脚本的环境
+```
+
+`opentoggle press` 基于 CGEvent，需一次性授予「辅助功能」权限；它取代各脚本自行调 osascript 的做法，把权限收敛到一个二进制上。
 
 属性值含空格时以双引号包裹。每次调用均注入环境变量；开关开启时修改参数会以新环境重启。
 
@@ -155,6 +163,7 @@ opentoggle add <file.sh>           # 校验 + 安装新开关
 opentoggle put <id> <file.sh>      # 校验 + 替换已有开关脚本
 opentoggle rm <id>                 # 删除（移到废纸篓）
 opentoggle validate <file.sh>      # 离线契约检查
+opentoggle press <keyspec>         # 合成按键/鼠标事件（f15、cmd+shift+k、mouse:middle）
 opentoggle mcp                     # MCP stdio server
 ```
 

@@ -47,6 +47,7 @@ A switch is one executable script carrying metadata as `# <switch.*>` directive 
 # <switch.param> key=mode type=select label=Mode default=a options="Label A=a|Label B=b"
 # <switch.param> key=duration type=number label="Duration (min)" default=0 min=0 max=1440 presets="Unlimited=0|1 h=60"
 # <switch.param> key=note type=text label=Note hint="placeholder text"
+# <switch.param> key=nudge type=key label=Key default=f15
 # <switch.menubar> mode=add icon=☕️ countdown=on
 ```
 
@@ -55,6 +56,14 @@ A switch is one executable script carrying metadata as `# <switch.*>` directive 
 **daemon** (long-running): invoked as `<script> run`. Start the foreground process with `exec` so SIGTERM reaches it. Exit 0 = natural completion (switch resets); non-zero = *error*.
 
 **Parameters** are injected as environment variables on every invocation: `key=mode` → `$SWITCH_MODE` (uppercase, non-alphanumerics become `_`). `options`/`presets` use `label=value|label=value`; quote attribute values containing spaces. `presets` renders quick-pick buttons for number/text params.
+
+**Key params & sending keys**: `type=key` renders a key picker (capture / common keys / mouse buttons). The value is a key spec — `f15`, `cmd+shift+k`, `mouse:middle` (modifiers: cmd/shift/opt/ctrl/fn). Scripts send it with the built-in synthesizer instead of osascript:
+
+```bash
+"${OPENTOGGLE_BIN:-opentoggle}" press "$SWITCH_NUDGE"
+```
+
+`$OPENTOGGLE_BIN` (absolute binary path) is injected into every script's environment, so this works even when PATH is minimal. `press` requires a one-time Accessibility permission grant (System Settings → Privacy & Security → Accessibility); it exits non-zero when unauthorized — fail fast on that so the switch shows *error* instead of silently doing nothing.
 
 **Menu bar**: `mode=add` shows a dedicated status item while on; `mode=replace` swaps the app icon. `countdown=on` requires a number param with `key=duration` (minutes, 0 = unlimited).
 

@@ -106,13 +106,21 @@ Off sends SIGTERM. Use `exec` so the signal reaches your process directly. Exit 
 | Attribute | Applies to | Description |
 |---|---|---|
 | `key` | all | Identifier; injected as `SWITCH_<KEY>` (uppercased, non-alphanumerics → `_`) |
-| `type` | all | `select` \| `number` \| `text` |
+| `type` | all | `select` \| `number` \| `text` \| `key` |
 | `label` | all | Display label in the panel |
 | `default` | all | Initial value; for `select`, defaults to the first option's value |
 | `options` | select | `label=value` pairs separated by `\|` |
 | `presets` | number, text | Quick-pick buttons, same `label=value\|…` format; coexist with the input field |
 | `min` / `max` | number | Inclusive bounds |
 | `hint` | all | Placeholder (text) or tooltip (others) |
+
+`type=key` renders a key picker (press-to-capture, common-keys grid, or mouse buttons). Its value is a key spec — `f15`, `cmd+shift+k`, `mouse:middle` — which scripts send via the built-in synthesizer:
+
+```bash
+"${OPENTOGGLE_BIN:-opentoggle}" press "$SWITCH_NUDGE"   # OPENTOGGLE_BIN is injected into every script
+```
+
+`opentoggle press` uses CGEvent and needs a one-time Accessibility grant; it replaces per-script osascript hacks and concentrates the permission on one binary.
 
 Quote any attribute value containing spaces. Values are injected as environment variables on every invocation; changing a parameter while a switch is on restarts it with the new environment.
 
@@ -155,6 +163,7 @@ opentoggle add <file.sh>           # validate + install a new switch
 opentoggle put <id> <file.sh>      # validate + replace a switch's script
 opentoggle rm <id>                 # delete (moves to Trash)
 opentoggle validate <file.sh>      # offline contract lint
+opentoggle press <keyspec>         # synthesize a key/mouse event (f15, cmd+shift+k, mouse:middle)
 opentoggle mcp                     # MCP stdio server
 ```
 
