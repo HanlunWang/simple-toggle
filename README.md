@@ -1,8 +1,12 @@
-# OpenToggle
+<p align="center">
+  <img src="Assets/icon-1024.png" width="140" alt="OpenToggle icon">
+</p>
 
-**Turn any script into a managed menu bar switch on macOS.**
+<h1 align="center">OpenToggle</h1>
 
-English | [简体中文](README.zh-CN.md)
+<p align="center"><b>Turn any script into a managed menu bar switch on macOS.</b></p>
+
+<p align="center">English | <a href="README.zh-CN.md">简体中文</a></p>
 
 OpenToggle renders each of your automation scripts as a first-class switch in the macOS menu bar — a name, a status light, and a toggle. Turning a switch on starts the automation; turning it off stops it; state survives restarts. Write the automation in any language, declare a few metadata directives, and OpenToggle handles the process lifecycle, status polling, parameter UI, and persistence.
 

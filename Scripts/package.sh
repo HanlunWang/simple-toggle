@@ -34,6 +34,9 @@ cp "$BIN" "$STAGE/Contents/MacOS/$APP_NAME"
 if [ -d "$RES" ]; then
   cp -R "$RES" "$STAGE/Contents/Resources/"
 fi
+if [ -f "Assets/AppIcon.icns" ]; then
+  cp "Assets/AppIcon.icns" "$STAGE/Contents/Resources/AppIcon.icns"
+fi
 
 cat > "$STAGE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -56,6 +59,8 @@ cat > "$STAGE/Contents/Info.plist" <<PLIST
     <string>$VERSION</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>

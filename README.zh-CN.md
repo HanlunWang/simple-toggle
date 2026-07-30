@@ -1,8 +1,12 @@
-# OpenToggle
+<p align="center">
+  <img src="Assets/icon-1024.png" width="140" alt="OpenToggle 图标">
+</p>
 
-**把任何脚本变成 macOS 菜单栏里的受管开关。**
+<h1 align="center">OpenToggle</h1>
 
-[English](README.md) | 简体中文
+<p align="center"><b>把任何脚本变成 macOS 菜单栏里的受管开关。</b></p>
+
+<p align="center"><a href="README.md">English</a> | 简体中文</p>
 
 OpenToggle 把你的每个自动化脚本渲染成菜单栏中的一等公民开关——名称、状态灯、Toggle。开 = 启动自动化，关 = 停止，状态跨重启保持。脚本可用任何语言编写，声明几行元数据指令，进程生命周期、状态轮询、参数 UI 与持久化全部由 OpenToggle 接管。
 
