@@ -37,11 +37,23 @@ OpenToggle's model is *script → managed switch*. The contract is the product.
 
 ## Getting Started
 
+**Install as an app (recommended):**
+
 ```bash
 git clone git@github.com:HanlunWang/open-toggle.git
 cd open-toggle
+./Scripts/package.sh
+```
+
+This builds a release binary, wraps it into `OpenToggle.app` (stable bundle id, `LSUIElement`), signs it with a stable identity (an existing code-signing certificate if you have one, otherwise a self-signed one is created), installs it to `/Applications`, and links the `opentoggle` CLI into `~/.local/bin`. A stable signing identity means macOS permission grants (Accessibility for key-sending switches) **survive rebuilds** — grant once, repackage freely.
+
+**Or run from source (dev mode):**
+
+```bash
 swift run
 ```
+
+Note: dev binaries are ad-hoc signed, so each rebuild invalidates a previous Accessibility grant — `opentoggle doctor` diagnoses this.
 
 A switch icon appears in the menu bar. First launch seeds a library of ready-to-use switches into the scripts directory (each installed once; deleting one won't resurrect it):
 

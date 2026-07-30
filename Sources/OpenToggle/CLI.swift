@@ -31,17 +31,36 @@ enum CLI {
             MCPServer.run() // never returns
 
         case "press":
-            // 离线可用：合成键盘/鼠标事件（脚本里配合 key 型参数使用）
             guard let specString = rest.first else {
                 fail("usage: opentoggle press <keyspec>   e.g. f15, cmd+shift+k, mouse:middle")
             }
             guard let spec = KeySpec.parse(specString) else {
                 fail("invalid key spec \"\(specString)\" — expected e.g. f15, cmd+shift+k, mouse:middle")
             }
-            guard KeySpec.checkAccessibility(prompt: true) else {
-                fail("accessibility permission required: System Settings → Privacy & Security → Accessibility → allow OpenToggle")
+            // 优先让运行中的 app 代发：辅助功能权限只需授予 app 这一个长期进程，
+            // 而不是每次敲键都新起、每次重新构建都换身份的短命子进程。
+            if !args.contains("--local"), let (status, body) = tryAPI("POST", "/v1/press", body: Data(spec.canonical.utf8)) {
+                if status < 400 { exit(0) }
+                FileHandle.standardError.write(body)
+                FileHandle.standardError.write(Data("\n".utf8))
+                exit(1)
             }
-            exit(spec.post() ? 0 : 1)
+            // app 未运行：本地合成（终端直接调用时走这条）
+            switch spec.post() {
+            case .delivered:
+                exit(0)
+            case .notTrusted:
+                _ = KeySpec.checkAccessibility(prompt: true)
+                fail("accessibility permission required: System Settings → Privacy & Security → Accessibility → allow this binary")
+            case .notDelivered:
+                fail("key event was rejected by the system — re-grant Accessibility (rebuilding the binary invalidates the previous grant)")
+            case .eventCreationFailed:
+                fail("failed to create the key event")
+            }
+
+        case "doctor":
+            runDoctor()
+            exit(0)
 
         case "list":
             let data = api("GET", "/v1/switches")
@@ -143,6 +162,70 @@ enum CLI {
         return ControlServer.defaultPort
     }
 
+    /// 尝试请求；app 未运行时返回 nil（不退出进程）
+    static func tryAPI(_ method: String, _ path: String, body: Data? = nil) -> (Int, Data)? {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
+        request.httpMethod = method
+        request.httpBody = body
+        request.timeoutInterval = 10
+
+        var result: Data?
+        var failed = false
+        var statusCode = 0
+        let semaphore = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            result = data
+            failed = error != nil
+            statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            semaphore.signal()
+        }.resume()
+        semaphore.wait()
+        return failed ? nil : (statusCode, result ?? Data())
+    }
+
+    /// 环境自检：定位"开关亮着却没反应"这类问题
+    private static func runDoctor() {
+        print("OpenToggle \(appVersion)")
+        print("binary:        \(Bundle.main.executablePath ?? CommandLine.arguments[0])")
+
+        if let (_, body) = tryAPI("GET", "/v1/ping"),
+           let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+            let axOK = obj["accessibility"] as? Bool ?? false
+            print("app:           running (version \(obj["version"] as? String ?? "?"))")
+            print("accessibility: \(axOK ? "granted (app process)" : "NOT GRANTED for the app process")")
+            if !axOK {
+                print("               → System Settings → Privacy & Security → Accessibility → enable OpenToggle")
+                print("               → note: rebuilding the binary invalidates a previous grant; remove the")
+                print("                 stale entry with “−” and add it again")
+            }
+        } else {
+            print("app:           not running (GUI-dependent commands will fail)")
+            print("accessibility: \(KeySpec.checkAccessibility(prompt: false) ? "granted (this CLI process)" : "NOT GRANTED for this CLI process")")
+        }
+
+        if let idle = KeySpec.systemIdleSeconds() {
+            print("system idle:   \(String(format: "%.1f", idle))s")
+        }
+
+        // 真发一次 F15，用空闲计时器验证是否落地
+        print("press test:    ", terminator: "")
+        guard let spec = KeySpec.parse("f15") else { print("internal error"); return }
+        if let (status, body) = tryAPI("POST", "/v1/press", body: Data("f15".utf8)) {
+            if status < 400 {
+                print("OK — F15 delivered via the app process")
+            } else {
+                print("FAILED via app — \(String(data: body, encoding: .utf8) ?? "")")
+            }
+        } else {
+            switch spec.post() {
+            case .delivered: print("OK — F15 delivered locally")
+            case .notTrusted: print("FAILED — no accessibility permission")
+            case .notDelivered: print("FAILED — event rejected by the system (stale permission grant)")
+            case .eventCreationFailed: print("FAILED — could not create the event")
+            }
+        }
+    }
+
     /// 同步请求；连接失败 → 提示 app 未运行并退出
     static func api(_ method: String, _ path: String, body: Data? = nil) -> Data {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
@@ -224,7 +307,9 @@ enum CLI {
       rm <id>                  delete a switch (moves script to Trash)
       validate <file.sh>       lint a script against the contract (offline)
       press <keyspec>          synthesize a key/mouse event (f15, cmd+shift+k,
-                               mouse:middle); needs Accessibility permission
+                               mouse:middle); routed through the running app so
+                               Accessibility is granted once, --local to bypass
+      doctor                   diagnose app/permission/key-delivery problems
       mcp                      run as an MCP stdio server (for AI agents)
       version | help
 

@@ -163,13 +163,38 @@ private enum Router {
 
         switch (req.method, parts.count) {
         case ("GET", 2) where parts == ["v1", "ping"]:
-            return json(200, ["app": "OpenToggle", "version": appVersion])
+            return json(200, [
+                "app": "OpenToggle",
+                "version": appVersion,
+                "accessibility": KeySpec.checkAccessibility(prompt: false),
+            ])
 
         case ("GET", 2) where parts == ["v1", "switches"]:
             return encode(200, manager.switches.map { dto($0) })
 
         case ("POST", 2) where parts == ["v1", "scripts"]:
             return createScript(req.body)
+
+        case ("POST", 2) where parts == ["v1", "press"]:
+            // 由 app 进程代发按键：权限只需授予 app 这一个长期进程，
+            // 而不是每次敲键新起的短命子进程。
+            guard let specString = String(data: req.body, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                  let spec = KeySpec.parse(specString) else {
+                return jsonError(400, "body must be a valid key spec (e.g. f15, cmd+shift+k, mouse:middle)")
+            }
+            switch spec.post() {
+            case .delivered:
+                return json(200, ["ok": true, "key": spec.canonical])
+            case .notTrusted:
+                AccessibilityStatus.shared.markDenied()
+                return jsonError(403, "accessibility permission not granted for OpenToggle — System Settings → Privacy & Security → Accessibility")
+            case .notDelivered:
+                AccessibilityStatus.shared.markDenied()
+                return jsonError(403, "key event was rejected by the system — re-grant Accessibility for OpenToggle (a rebuild invalidates the previous grant)")
+            case .eventCreationFailed:
+                return jsonError(500, "failed to create the key event")
+            }
 
         case ("POST", 2) where parts == ["v1", "validate"]:
             guard let content = String(data: req.body, encoding: .utf8) else {

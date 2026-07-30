@@ -37,11 +37,23 @@ OpenToggle 的模型是「脚本 → 受管开关」。契约即产品。
 
 ## 快速开始
 
+**安装为 app（推荐）：**
+
 ```bash
 git clone git@github.com:HanlunWang/open-toggle.git
 cd open-toggle
+./Scripts/package.sh
+```
+
+脚本会构建 release 二进制、打成 `OpenToggle.app`（稳定 bundle id、`LSUIElement`）、用稳定身份签名（有代码签名证书则复用，否则自动创建自签证书）、安装到 `/Applications`，并把 `opentoggle` CLI 链接到 `~/.local/bin`。签名身份稳定意味着 macOS 权限授权（发键开关所需的辅助功能）**跨构建存活**——授权一次，随意重新打包。
+
+**或从源码运行（开发模式）：**
+
+```bash
 swift run
 ```
+
+注意：开发构建是 ad-hoc 签名，每次重新构建都会使之前的辅助功能授权失效——`opentoggle doctor` 可诊断此类问题。
 
 菜单栏出现开关图标。首次启动会安装一套开箱即用的预制开关（每个只安装一次，删除后不会复活）：
 

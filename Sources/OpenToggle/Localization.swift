@@ -129,6 +129,9 @@ struct S {
     let mouseRight: String
     let mouseNote: String
     let bareKeyWarning: String
+    let axTitle: String
+    let axDetail: String
+    let axGrant: String
     let optionsLabel: String
     let optionsHelp: String
     let defaultLabel: String
@@ -308,6 +311,9 @@ extension S {
         mouseRight: "Right Click",
         mouseNote: "Clicks are sent at the current cursor position.",
         bareKeyWarning: "A bare character key may interfere with normal typing",
+        axTitle: "Accessibility permission required",
+        axDetail: "Switches that send keystrokes need it — without it macOS silently drops the events and the switch does nothing. After rebuilding, remove the stale OpenToggle entry and add it again.",
+        axGrant: "Open Accessibility Settings",
         optionsLabel: "Options",
         optionsHelp: """
         Option set, formatted `label=value`, separated by `|`. Example:
@@ -523,6 +529,9 @@ extension S {
         mouseRight: "鼠标右键",
         mouseNote: "点击发送在当前光标位置。",
         bareKeyWarning: "无修饰键的字符键可能干扰正常输入",
+        axTitle: "需要辅助功能权限",
+        axDetail: "发送按键的开关依赖此权限——未授权时 macOS 会静默丢弃事件，开关看似开启却毫无作用。重新构建后请先移除列表中失效的 OpenToggle 条目再重新添加。",
+        axGrant: "打开辅助功能设置",
         optionsLabel: "选项",
         optionsHelp: """
         候选集定义，格式 `label=value`，多项以 `|` 分隔。例：

@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import AppKit
 import ApplicationServices
+import IOKit
 
 /// 规范化按键描述（key 型参数的值格式）：
 ///   "[modifier+]*key"  →  "f15"、"cmd+shift+k"、"ctrl+opt+space"
@@ -124,19 +125,44 @@ struct KeySpec: Equatable {
         return AXIsProcessTrustedWithOptions(options)
     }
 
+    /// 系统空闲秒数（距上次 HID 输入）。这是 Teams 等应用判定"离开"的依据，
+    /// 也是我们验证事件是否真正送达系统的唯一可靠标尺。
+    static func systemIdleSeconds() -> Double? {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOHIDSystem"))
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+        guard let property = IORegistryEntryCreateCFProperty(
+            service, "HIDIdleTime" as CFString, kCFAllocatorDefault, 0
+        )?.takeRetainedValue() as? NSNumber else { return nil }
+        return property.doubleValue / 1_000_000_000
+    }
+
+    enum PostResult: Equatable {
+        case delivered
+        case notTrusted        // 未获辅助功能授权
+        case notDelivered      // 已授权但事件未落地（签名失效/系统拒绝）
+        case eventCreationFailed
+    }
+
+    /// 发送事件并**验证是否真正送达**。
+    /// CGEvent.post() 无返回值，被系统丢弃时也毫无声响——只看它会造成"开关亮着却什么都没做"。
+    /// 因此这里以 HID 空闲计时器归零作为送达证据。
     @discardableResult
-    func post() -> Bool {
+    func post() -> PostResult {
+        guard Self.checkAccessibility(prompt: false) else { return .notTrusted }
+
+        let idleBefore = Self.systemIdleSeconds()
+
         switch target {
         case .key(let code):
             let source = CGEventSource(stateID: .hidSystemState)
             guard let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
                   let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
-            else { return false }
+            else { return .eventCreationFailed }
             down.flags = flags
             up.flags = flags
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
-            return true
 
         case .mouse(let button):
             let location = CGEvent(source: nil)?.location ?? .zero
@@ -149,10 +175,18 @@ struct KeySpec: Equatable {
                                      mouseCursorPosition: location, mouseButton: button),
                   let up = CGEvent(mouseEventSource: nil, mouseType: types.up,
                                    mouseCursorPosition: location, mouseButton: button)
-            else { return false }
+            else { return .eventCreationFailed }
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
-            return true
         }
+
+        // 事件进入 HID 层需要极短时间
+        Thread.sleep(forTimeInterval: 0.05)
+
+        // 空闲计时器归零 = 事件确实落地。
+        // 空闲本来就接近 0（用户正在操作）时无法区分，按送达处理。
+        guard let idleBefore, let idleAfter = Self.systemIdleSeconds() else { return .delivered }
+        if idleAfter < idleBefore || idleAfter < 0.5 { return .delivered }
+        return .notDelivered
     }
 }

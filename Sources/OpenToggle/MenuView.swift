@@ -14,6 +14,8 @@ struct MenuView: View {
                 .padding(.vertical, 10)
             Divider()
 
+            AccessibilityBanner()
+
             if manager.visibleSwitches.isEmpty {
                 Text(loc.s.panelEmpty)
                     .font(.callout)

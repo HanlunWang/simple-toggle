@@ -50,6 +50,7 @@ final class SwitchManager: ObservableObject {
         }
         // 本地控制 API：CLI / MCP / 第三方 AI 工具的接入点
         ControlServer.shared.start()
+        AccessibilityStatus.shared.start()
     }
 
     /// app 退出时清理所有持有的 daemon，避免孤儿进程
