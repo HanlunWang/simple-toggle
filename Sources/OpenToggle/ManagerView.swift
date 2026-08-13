@@ -317,6 +317,10 @@ struct ManagerView: View {
         }
         .onDisappear {
             EditorState.shared.isDirty = false
+            manager.panelDidDisappear()
+        }
+        .onAppear {
+            manager.panelDidAppear()
         }
         .confirmationDialog(loc.s.discardTitle, isPresented: $showDiscardDialog) {
             Button(loc.s.discardConfirm, role: .destructive) {

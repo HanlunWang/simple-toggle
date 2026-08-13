@@ -56,6 +56,9 @@ struct MenuView: View {
             .padding(.vertical, 8)
         }
         .frame(width: 320)
+        // 面板可见性驱动自适应轮询：打开 5s 一轮，收起降到 30s
+        .onAppear { manager.panelDidAppear() }
+        .onDisappear { manager.panelDidDisappear() }
     }
 }
 
@@ -238,7 +241,8 @@ private struct NumberField: View {
                 .textFieldStyle(.roundedBorder)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 56)
-            Stepper("", value: intBinding, in: (min ?? 0)...(max ?? Int.max))
+            // 上限缺省给一个有限值，避免步进到 Int.max 附近的溢出 trap
+            Stepper("", value: intBinding, in: (min ?? 0)...(max ?? 1_000_000))
                 .labelsHidden()
         }
     }

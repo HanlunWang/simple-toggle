@@ -15,22 +15,39 @@ final class AccessibilityStatus: ObservableObject {
 
     func start() {
         refresh()
-        // 用户在系统设置里授权后无回调通知，轮询以便横幅及时消失
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
     }
 
     func refresh() {
-        needed = SwitchManager.shared.switches.contains { sw in
+        // 等值守卫：避免无变化的 @Published 写入触发视图失效
+        let newNeeded = SwitchManager.shared.switches.contains { sw in
             SwitchManager.shared.isEnabled(sw) && sw.params.contains { $0.type == .key }
         }
-        trusted = KeySpec.checkAccessibility(prompt: false)
+        if needed != newNeeded { needed = newNeeded }
+        let newTrusted = KeySpec.checkAccessibility(prompt: false)
+        if trusted != newTrusted { trusted = newTrusted }
+        updateTimer()
+    }
+
+    /// 只在横幅显示期间轮询（等用户去系统设置授权，授权后横幅自动消失并停表）；
+    /// 其余时间零定时器。
+    private func updateTimer() {
+        let shouldPoll = needed && !trusted
+        if shouldPoll, timer == nil {
+            let t = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            }
+            t.tolerance = 1
+            timer = t
+        } else if !shouldPoll {
+            timer?.invalidate()
+            timer = nil
+        }
     }
 
     /// 实际发送被拒时调用：立即翻转状态，不必等下一次轮询
     func markDenied() {
-        trusted = false
+        if trusted { trusted = false }
+        updateTimer()
     }
 
     /// 触发系统授权弹窗，并打开设置面板

@@ -95,6 +95,10 @@ private enum HTTPConnection {
 
     nonisolated static func serve(_ conn: NWConnection) {
         conn.start(queue: .global())
+        // 空闲超时：半开/慢速连接 20 秒后强制关闭，防止连接常年累积
+        DispatchQueue.global().asyncAfter(deadline: .now() + 20) {
+            conn.cancel() // 已完成的连接重复 cancel 无害
+        }
         receive(conn, Data())
     }
 
@@ -104,7 +108,7 @@ private enum HTTPConnection {
             if let data { buf.append(data) }
             if let request = parse(buf) {
                 Task { @MainActor in
-                    let (status, contentType, body) = Router.route(request)
+                    let (status, contentType, body) = await Router.route(request)
                     respond(conn, status: status, contentType: contentType, body: body)
                 }
             } else if isComplete || error != nil || buf.count > 1 << 22 {
@@ -125,7 +129,8 @@ private enum HTTPConnection {
         for line in headLines.dropFirst() {
             let kv = line.split(separator: ":", maxSplits: 1)
             if kv.count == 2, kv[0].lowercased() == "content-length" {
-                contentLength = Int(kv[1].trimmingCharacters(in: .whitespaces)) ?? 0
+                // 钳制到 [0, 4MB]：负值会让 subdata 范围崩溃，超大值会挂死连接
+                contentLength = min(max(Int(kv[1].trimmingCharacters(in: .whitespaces)) ?? 0, 0), 1 << 22)
             }
         }
         let bodyStart = headerEnd.upperBound
@@ -153,7 +158,7 @@ private enum HTTPConnection {
 private enum Router {
     typealias Response = (Int, String, Data)
 
-    static func route(_ req: HTTPConnection.Request) -> Response {
+    static func route(_ req: HTTPConnection.Request) async -> Response {
         // 客户端用 URL(string:) 构造请求，非 ASCII 的 id（如中文名）会被 percent-encode，
         // 这里必须解码回来才能匹配上 switch。先按 "/" 切分再逐段解码——反过来会让
         // 编码进 id 的 %2F 变成路径分隔符。
@@ -183,7 +188,14 @@ private enum Router {
                   let spec = KeySpec.parse(specString) else {
                 return jsonError(400, "body must be a valid key spec (e.g. f15, cmd+shift+k, mouse:middle)")
             }
-            switch spec.post() {
+            // post() 内含 50ms 的送达验证等待，放到后台线程，不阻塞主 actor。
+            // app 刚启动时首次 post 偶发被丢（事件通道未就绪），重试一次再下结论。
+            var result = await Task.detached { spec.post() }.value
+            if result == .notDelivered {
+                try? await Task.sleep(for: .milliseconds(150))
+                result = await Task.detached { spec.post() }.value
+            }
+            switch result {
             case .delivered:
                 return json(200, ["ok": true, "key": spec.canonical])
             case .notTrusted:

@@ -8,8 +8,8 @@ import IOKit
 ///   "[modifier+]*key"  →  "f15"、"cmd+shift+k"、"ctrl+opt+space"
 ///   "mouse:left|middle|right"（鼠标键，当前光标位置点击）
 /// 修饰键：cmd / shift / opt / ctrl / fn（别名 command、option、alt、control）
-struct KeySpec: Equatable {
-    enum Target: Equatable {
+struct KeySpec: Equatable, Sendable {
+    enum Target: Equatable, Sendable {
         case key(CGKeyCode)
         case mouse(CGMouseButton)
     }

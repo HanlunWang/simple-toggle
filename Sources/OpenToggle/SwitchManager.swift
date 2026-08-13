@@ -25,6 +25,9 @@ final class SwitchManager: ObservableObject {
     private var pollTimer: Timer?
     private var countdownTimer: Timer?
     private var isPolling = false
+    /// 用户操作的世代号：轮询完成时若已过期，整批结果作废（防止慢速 status
+    /// 子进程期间发生的开关操作被陈旧快照覆盖）
+    private var stateGeneration = 0
 
     private let defaults = UserDefaults.standard
     private let desiredKey = "OpenToggle.desiredStates"
@@ -44,13 +47,42 @@ final class SwitchManager: ObservableObject {
         loadParamValues()
         disabledIDs = Set(defaults.stringArray(forKey: disabledKey) ?? [])
         reload()
+        // 控制 API 必须先于状态恢复启动：恢复拉起的 daemon 可能立刻调用
+        // `opentoggle press`（经由本 API 代发），此时端口必须已在监听
+        ControlServer.shared.start()
         restoreDesiredStates()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        reschedulePolling()
+        AccessibilityStatus.shared.start()
+    }
+
+    // MARK: - 自适应轮询
+    // 状态灯只有面板/管理器打开时才被看到；后台把轮询降到 30s，
+    // 省下每 5s 起 N 个子进程（networksetup/osascript 都不便宜）的常驻开销。
+
+    private var visiblePanels = 0
+
+    private var pollInterval: TimeInterval { visiblePanels > 0 ? 5 : 30 }
+
+    func panelDidAppear() {
+        visiblePanels += 1
+        refreshStates() // 打开立即刷新一次，不等下个周期
+        reschedulePolling()
+        AccessibilityStatus.shared.refresh()
+    }
+
+    func panelDidDisappear() {
+        visiblePanels = max(0, visiblePanels - 1)
+        reschedulePolling()
+    }
+
+    private func reschedulePolling() {
+        pollTimer?.invalidate()
+        let interval = pollInterval
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refreshStates() }
         }
-        // 本地控制 API：CLI / MCP / 第三方 AI 工具的接入点
-        ControlServer.shared.start()
-        AccessibilityStatus.shared.start()
+        timer.tolerance = interval * 0.2 // 允许系统合并唤醒
+        pollTimer = timer
     }
 
     /// app 退出时清理所有持有的 daemon，避免孤儿进程
@@ -137,6 +169,7 @@ final class SwitchManager: ObservableObject {
 
     /// 脚本内容/配置改动后，若开关正开着则立即用新内容重启
     func restartIfRunning(_ sw: SwitchScript) {
+        stateGeneration += 1
         guard states[sw.id] == .on else { return }
         switch sw.type {
         case .daemon:
@@ -190,6 +223,7 @@ final class SwitchManager: ObservableObject {
 
     /// 修改参数；开关开着时立即重启/重跑使其生效
     func setValue(_ newValue: String, of param: SwitchParam, in sw: SwitchScript) {
+        stateGeneration += 1
         var values = paramValues[sw.id] ?? [:]
         guard values[param.key] != newValue else { return }
         values[param.key] = newValue
@@ -231,14 +265,17 @@ final class SwitchManager: ObservableObject {
         guard sw.menubar?.countdown == true,
               states[sw.id] == .on,
               let started = activatedAt[sw.id],
-              let minutes = Int(value(ofKey: "duration", in: sw) ?? ""), minutes > 0
+              let rawMinutes = Int(value(ofKey: "duration", in: sw) ?? ""), rawMinutes > 0
         else { return nil }
+        // 上限约 1900 年，防脚本声明超大值时 *60 溢出 trap
+        let minutes = min(rawMinutes, 1_000_000_000)
         return max(0, minutes * 60 - Int(Date().timeIntervalSince(started)))
     }
 
     // MARK: - 开关操作
 
     func setSwitch(_ sw: SwitchScript, to on: Bool) {
+        stateGeneration += 1
         var desired = desiredStates()
         desired[sw.id] = on
         defaults.set(desired, forKey: desiredKey)
@@ -309,6 +346,7 @@ final class SwitchManager: ObservableObject {
     func refreshStates() {
         guard !isPolling else { return }
         isPolling = true
+        let generation = stateGeneration
         let toPoll = switches.filter { !disabledIDs.contains($0.id) }
         let daemonAlive = daemons.mapValues { $0.isRunning }
         let envs = Dictionary(uniqueKeysWithValues: toPoll.map { ($0.id, environment(for: $0)) })
@@ -330,15 +368,18 @@ final class SwitchManager: ObservableObject {
             let resolved = newStates
             await MainActor.run {
                 guard let self else { return }
+                self.isPolling = false
+                // 轮询期间发生过用户操作 → 本批快照已过期，丢弃（下一轮会校正）
+                guard self.stateGeneration == generation else { return }
                 for (id, state) in resolved {
                     // daemon 的 error 态（意外退出）由 terminationHandler 标记，轮询不覆盖
                     if self.states[id] == .error && state == .off { continue }
                     // toggle 型被外部打开（如终端手动执行）时补记开启时刻
                     if state == .on && self.activatedAt[id] == nil { self.activatedAt[id] = Date() }
                     if state != .on && self.daemons[id] == nil { self.activatedAt[id] = nil }
-                    self.states[id] = state
+                    // 等值守卫：值没变不写 @Published，避免无谓的 SwiftUI 失效
+                    if self.states[id] != state { self.states[id] = state }
                 }
-                self.isPolling = false
                 self.syncMenuBar()
             }
         }
@@ -353,10 +394,13 @@ final class SwitchManager: ObservableObject {
 
     private func syncMenuBar() {
         let replaceSwitch = switches.first { $0.menubar?.mode == .replace && states[$0.id] == .on }
-        iconOverride = replaceSwitch?.menubar?.icon
-        iconOverrideCountdown = replaceSwitch
+        // 等值守卫：倒计时 tick 每秒到来，值没变绝不触发 objectWillChange
+        let newOverride = replaceSwitch?.menubar?.icon
+        if iconOverride != newOverride { iconOverride = newOverride }
+        let newCountdown = replaceSwitch
             .flatMap { remainingSeconds(for: $0) }
             .map(formatCountdown)
+        if iconOverrideCountdown != newCountdown { iconOverrideCountdown = newCountdown }
         StatusBarController.shared.sync(with: self)
         updateCountdownTimer()
     }
@@ -365,9 +409,11 @@ final class SwitchManager: ObservableObject {
     private func updateCountdownTimer() {
         let needsTick = switches.contains { remainingSeconds(for: $0) != nil }
         if needsTick, countdownTimer == nil {
-            countdownTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.syncMenuBar() }
             }
+            timer.tolerance = 0.2
+            countdownTimer = timer
         } else if !needsTick {
             countdownTimer?.invalidate()
             countdownTimer = nil

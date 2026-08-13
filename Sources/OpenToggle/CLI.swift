@@ -192,6 +192,9 @@ enum CLI {
            let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
             let axOK = obj["accessibility"] as? Bool ?? false
             print("app:           running (version \(obj["version"] as? String ?? "?"))")
+            if let cpu = appCPUPercent() {
+                print("app cpu:       \(cpu)%\(Double(cpu) ?? 0 > 20 ? "  ← unusually high, please report" : "")")
+            }
             print("accessibility: \(axOK ? "granted (app process)" : "NOT GRANTED for the app process")")
             if !axOK {
                 print("               → System Settings → Privacy & Security → Accessibility → enable OpenToggle")
@@ -224,6 +227,25 @@ enum CLI {
             case .eventCreationFailed: print("FAILED — could not create the event")
             }
         }
+    }
+
+    /// 读运行中 app 的瞬时 CPU 占用（pid 来自发现文件）
+    private static func appCPUPercent() -> String? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/open-toggle/api.json")
+        guard let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let pid = obj["pid"] as? Int else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-o", "pcpu=", "-p", String(pid)]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        guard (try? process.run()) != nil else { return nil }
+        process.waitUntilExit()
+        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (out?.isEmpty == false) ? out : nil
     }
 
     /// 同步请求；连接失败 → 提示 app 未运行并退出
