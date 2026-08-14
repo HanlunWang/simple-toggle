@@ -10,7 +10,7 @@
 #
 cask "opentoggle" do
   version "0.5.0"
-  sha256 "REPLACE_WITH_RELEASE_SH_OUTPUT"
+  sha256 "1bd6202e2dc17f1efcaf4487512ee1a91c7e1fa619ff977774579e3dd50defce"
 
   url "https://github.com/HanlunWang/open-toggle/releases/download/v#{version}/OpenToggle-#{version}.zip"
   name "OpenToggle"
