@@ -154,6 +154,11 @@ private struct SwitchRow: View {
 
     private var state: SwitchState { manager.states[script.id] ?? .unknown }
 
+    private func toggleExpanded() {
+        guard !script.params.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 9) {
@@ -174,14 +179,14 @@ private struct SwitchRow: View {
                 }
                 Spacer(minLength: 4)
                 if !script.params.isEmpty {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
-                    } label: {
+                    Button(action: toggleExpanded) {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 8.5, weight: .semibold))
                             .foregroundStyle(OT.txt3)
                             .rotationEffect(.degrees(expanded ? 180 : 0))
-                            .padding(3)
+                            // 可点热区放大到 24×24（视觉尺寸不变）
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -195,6 +200,9 @@ private struct SwitchRow: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
+            // 整行皆可点击展开/收起（拨杆和箭头按钮优先级更高，不受影响）；
+            // 箭头从"唯一入口"降级为指示器
+            .onTapGesture(perform: toggleExpanded)
             .contextMenu {
                 Button(loc.s.editScriptFile) { NSWorkspace.shared.open(script.url) }
                 Button(loc.s.revealInFinder) {

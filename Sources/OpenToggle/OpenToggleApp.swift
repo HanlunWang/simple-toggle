@@ -21,8 +21,9 @@ struct OpenToggleApp: App {
     }
 }
 
-/// 主图标：`❯▊`（有开关运行时光标实心，全关时空心下划线；静态无动画，零 CPU）；
-/// 有 mode=replace 的开关开启时换成它声明的图标（可带倒计时）。设计稿 A7。
+/// 主图标：程序化绘制的迷你开关胶囊（MenuBarIcon，模板样式随系统着色）。
+/// 有开关运行 → 实心旋钮在右；全关 → 空心旋钮在左。
+/// 有 mode=replace 的开关开启时换成它声明的图标（可带倒计时）。
 private struct MenuBarLabel: View {
     @ObservedObject var manager: SwitchManager
 
@@ -40,8 +41,7 @@ private struct MenuBarLabel: View {
                     Text(icon)
                 }
             } else {
-                Text(anyOn ? "❯▊" : "❯_")
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                Image(nsImage: anyOn ? MenuBarIcon.on : MenuBarIcon.off)
             }
             if let countdown = manager.iconOverrideCountdown {
                 Text(countdown)

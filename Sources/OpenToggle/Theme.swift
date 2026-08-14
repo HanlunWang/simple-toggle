@@ -19,6 +19,7 @@ enum OT {
 
 extension View {
     /// 面板/窗口内容的玻璃底：烟灰渐层 + 左上冷光斜射
+    /// （试过 behind-window 真磨砂，实测不透明版的层次感更贴设计，遂定稿此版）
     func otSurface() -> some View {
         background(
             ZStack {
