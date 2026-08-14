@@ -29,14 +29,17 @@ enum ScriptRunner {
         process.environment = baseEnvironment(merging: environment)
         let stdout = Pipe()
         process.standardOutput = stdout
-        process.standardError = Pipe()
+        // 不能挂一个从不读取的 Pipe：stderr 超过缓冲会反向堵死脚本
+        process.standardError = FileHandle.nullDevice
         do {
             try process.run()
         } catch {
             return Result(exitCode: 127, output: "")
         }
-        process.waitUntilExit()
+        // 先读到 EOF 再等退出：顺序反了会在脚本输出超过管道缓冲(64KB)时死锁，
+        // 且卡死的是轮询工作线程（isPolling 永远不复位）
         let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         let output = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return Result(exitCode: process.terminationStatus, output: output)

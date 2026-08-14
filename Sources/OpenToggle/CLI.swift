@@ -210,6 +210,10 @@ enum CLI {
             print("system idle:   \(String(format: "%.1f", idle))s")
         }
 
+        // 孤儿 daemon 检测：脚本目录下的进程若父进程不是运行中的 app，
+        // 说明上一代 app 未清理干净（会带着 caffeinate 常亮屏幕）
+        reportDaemonProcesses()
+
         // 真发一次 F15，用空闲计时器验证是否落地
         print("press test:    ", terminator: "")
         guard let spec = KeySpec.parse("f15") else { print("internal error"); return }
@@ -226,6 +230,61 @@ enum CLI {
             case .notDelivered: print("FAILED — event rejected by the system (stale permission grant)")
             case .eventCreationFailed: print("FAILED — could not create the event")
             }
+        }
+    }
+
+    /// 列出脚本目录相关进程，标记孤儿；并报告 caffeinate 防睡眠断言数量
+    private static func reportDaemonProcesses() {
+        let appPid: Int? = {
+            let url = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/open-toggle/api.json")
+            guard let data = try? Data(contentsOf: url),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            return obj["pid"] as? Int
+        }()
+        let switchesPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/open-toggle/switches").path
+
+        func shellLines(_ launchPath: String, _ args: [String]) -> [String] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: launchPath)
+            process.arguments = args
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            guard (try? process.run()) != nil else { return [] }
+            // 必须先读到 EOF 再 waitUntilExit：反过来在输出超过管道缓冲(64KB)时
+            // 会死锁（如 ps -eo 全进程列表）
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            let out = String(data: data, encoding: .utf8) ?? ""
+            return out.components(separatedBy: "\n").filter { !$0.isEmpty }
+        }
+
+        let daemonLines = shellLines("/bin/ps", ["-eo", "pid=,ppid=,command="])
+            .filter { $0.contains(switchesPath) }
+        var running = 0
+        var orphans: [String] = []
+        for line in daemonLines {
+            let cols = line.split(separator: " ", maxSplits: 2).map(String.init)
+            guard cols.count >= 2, let ppid = Int(cols[1]) else { continue }
+            running += 1
+            if ppid != (appPid ?? -1) {
+                orphans.append(cols[0])
+            }
+        }
+        if running > 0 || !orphans.isEmpty {
+            var lineOut = "daemons:       \(running) running"
+            if !orphans.isEmpty {
+                lineOut += "  ← ORPHANED pid(s) \(orphans.joined(separator: ", ")) not owned by the app; kill with: kill \(orphans.joined(separator: " "))"
+            }
+            print(lineOut)
+        }
+
+        let assertions = shellLines("/usr/bin/pmset", ["-g", "assertions"])
+            .filter { $0.contains("caffeinate") }.count
+        if assertions > 0 {
+            print("sleep asserts: \(assertions) held by caffeinate (screen/system kept awake)")
         }
     }
 

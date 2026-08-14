@@ -50,6 +50,7 @@ final class SwitchManager: ObservableObject {
         // 控制 API 必须先于状态恢复启动：恢复拉起的 daemon 可能立刻调用
         // `opentoggle press`（经由本 API 代发），此时端口必须已在监听
         ControlServer.shared.start()
+        sweepOrphanedDaemons()
         restoreDesiredStates()
         reschedulePolling()
         AccessibilityStatus.shared.start()
@@ -91,6 +92,50 @@ final class SwitchManager: ObservableObject {
             process.terminate()
         }
         daemons.removeAll()
+        try? FileManager.default.removeItem(at: daemonLedgerURL)
+    }
+
+    // MARK: - 孤儿 daemon 防护
+    // 正常退出走 shutdown()；但 app 被 kill -9 / 崩溃时 shutdown 不会执行，
+    // daemon（连同它的 caffeinate）会变成孤儿——屏幕从此常亮。
+    // 对策：spawn 的 PID 记入台账文件，下次启动先清扫上一代残留。
+
+    private var daemonLedgerURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/open-toggle/daemons.json")
+    }
+
+    private func writeDaemonLedger() {
+        var entries: [String: Int] = [:]
+        for (id, process) in daemons where process.isRunning {
+            entries[id] = Int(process.processIdentifier)
+        }
+        if entries.isEmpty {
+            try? FileManager.default.removeItem(at: daemonLedgerURL)
+        } else if let data = try? JSONSerialization.data(withJSONObject: entries) {
+            try? data.write(to: daemonLedgerURL)
+        }
+    }
+
+    private func sweepOrphanedDaemons() {
+        guard let data = try? Data(contentsOf: daemonLedgerURL),
+              let entries = try? JSONSerialization.jsonObject(with: data) as? [String: Int]
+        else { return }
+        for (_, pid) in entries {
+            // PID 复用防护：仅当该 pid 的命令行确实指向脚本目录才发信号
+            let probe = Process()
+            probe.executableURL = URL(fileURLWithPath: "/bin/ps")
+            probe.arguments = ["-o", "command=", "-p", String(pid)]
+            let pipe = Pipe()
+            probe.standardOutput = pipe
+            guard (try? probe.run()) != nil else { continue }
+            probe.waitUntilExit()
+            let command = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            if command.contains(scriptsDirectory.path) {
+                kill(pid_t(pid), SIGTERM)
+            }
+        }
+        try? FileManager.default.removeItem(at: daemonLedgerURL)
     }
 
     // MARK: - 目录扫描
@@ -289,6 +334,7 @@ final class SwitchManager: ObservableObject {
                 daemons[sw.id] = nil
                 activatedAt[sw.id] = nil
                 states[sw.id] = .off
+                writeDaemonLedger()
             }
         case .toggle:
             states[sw.id] = .unknown
@@ -323,6 +369,7 @@ final class SwitchManager: ObservableObject {
                 guard let self, self.daemons[sw.id] === proc else { return }
                 self.daemons[sw.id] = nil
                 self.activatedAt[sw.id] = nil
+                self.writeDaemonLedger()
                 if proc.terminationReason == .exit && proc.terminationStatus == 0 {
                     // 自然结束（如 caffeinate -t 到时）：视为正常关闭，重启后不再拉起
                     self.states[sw.id] = .off
@@ -339,6 +386,7 @@ final class SwitchManager: ObservableObject {
         daemons[sw.id] = process
         activatedAt[sw.id] = Date()
         states[sw.id] = .on
+        writeDaemonLedger()
     }
 
     // MARK: - 状态轮询
