@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-let appVersion = "0.5.0"
+let appVersion = "0.5.1"
 
 // MARK: - API DTO
 

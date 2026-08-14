@@ -71,10 +71,11 @@ cat > "$STAGE/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# ---- 签名身份 ----
+# ---- 签名身份（优先 Developer ID：与分发版同身份，辅助功能授权不漂移） ----
 find_identity() {
-  security find-identity -v -p codesigning 2>/dev/null \
-    | sed -n 's/.*"\(.*\)".*/\1/p' | head -1
+  local all
+  all=$(security find-identity -v -p codesigning 2>/dev/null | sed -n 's/.*"\(.*\)".*/\1/p')
+  echo "$all" | grep -m1 "^Developer ID Application" || echo "$all" | head -1
 }
 
 IDENTITY="${OPENTOGGLE_SIGN_IDENTITY:-$(find_identity)}"

@@ -23,10 +23,34 @@ enum ExampleScripts {
         ("web-proxy.sh", false),
     ]
 
+    /// 资源包解析：不用 SwiftPM 生成的 Bundle.module——它只认"可执行文件同目录"
+    /// 和编译机的构建路径，经 brew 的 /opt/homebrew/bin 软链启动时两者皆空，
+    /// 且失败即 fatalError。这里自己找（含软链穿透），找不到也绝不崩溃。
+    private static let resourceBundle: Bundle? = {
+        let bundleName = "OpenToggle_OpenToggle.bundle"
+        let realExecDir = Bundle.main.executableURL?
+            .resolvingSymlinksInPath()
+            .deletingLastPathComponent()
+        let candidates: [URL?] = [
+            Bundle.main.resourceURL,                                   // app bundle 的 Resources/
+            realExecDir,                                               // 真实可执行文件同目录（dev 构建）
+            realExecDir?.deletingLastPathComponent()
+                .appendingPathComponent("Resources"),                  // MacOS/../Resources（软链场景兜底）
+        ]
+        for candidate in candidates {
+            guard let url = candidate?.appendingPathComponent(bundleName) else { continue }
+            if FileManager.default.fileExists(atPath: url.path), let bundle = Bundle(url: url) {
+                return bundle
+            }
+        }
+        NSLog("OpenToggle: preset resource bundle not found; skipping example seeding")
+        return nil
+    }()
+
     static let all: [Example] = manifest.compactMap { entry in
-        guard let url = Bundle.module.url(forResource: entry.fileName,
-                                          withExtension: nil,
-                                          subdirectory: "Switches"),
+        guard let url = resourceBundle?.url(forResource: entry.fileName,
+                                            withExtension: nil,
+                                            subdirectory: "Switches"),
               let content = try? String(contentsOf: url, encoding: .utf8)
         else { return nil }
         return Example(fileName: entry.fileName,

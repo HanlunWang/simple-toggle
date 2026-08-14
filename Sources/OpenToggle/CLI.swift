@@ -393,6 +393,7 @@ enum CLI {
                                Accessibility is granted once, --local to bypass
       doctor                   diagnose app/permission/key-delivery problems
       mcp                      run as an MCP stdio server (for AI agents)
+      gui                      launch the menu bar app from a terminal
       version | help
 
     <id> is the script file name (keep-awake.sh; the .sh suffix is optional).
