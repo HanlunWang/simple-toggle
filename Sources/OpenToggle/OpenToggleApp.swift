@@ -21,9 +21,15 @@ struct OpenToggleApp: App {
     }
 }
 
-/// 主图标：默认 switch.2；有 mode=replace 的开关开启时换成它声明的图标（可带倒计时）
+/// 主图标：`❯▊`（有开关运行时光标实心，全关时空心下划线；静态无动画，零 CPU）；
+/// 有 mode=replace 的开关开启时换成它声明的图标（可带倒计时）。设计稿 A7。
 private struct MenuBarLabel: View {
     @ObservedObject var manager: SwitchManager
+
+    private var anyOn: Bool {
+        // 含隐藏开关：主图标回答的是"有没有东西在跑"，隐藏的也在跑
+        manager.switches.contains { manager.states[$0.id] == .on }
+    }
 
     var body: some View {
         HStack(spacing: 3) {
@@ -34,7 +40,8 @@ private struct MenuBarLabel: View {
                     Text(icon)
                 }
             } else {
-                Image(systemName: "switch.2")
+                Text(anyOn ? "❯▊" : "❯_")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
             }
             if let countdown = manager.iconOverrideCountdown {
                 Text(countdown)
@@ -49,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 无 Dock 图标（等价于 app bundle 里的 LSUIElement=1）
         NSApp.setActivationPolicy(.accessory)
+        // 黑白 liquid glass 是深色语言：全 app 强制深色外观。
+        // 必须在 app 级设置——preferredColorScheme 只作用于视图所在 presentation，
+        // popover/confirmationDialog/NSAlert 在浅色系统下会渲染成白底白字
+        NSApp.appearance = NSAppearance(named: .darkAqua)
         SwitchManager.shared.start()
     }
 

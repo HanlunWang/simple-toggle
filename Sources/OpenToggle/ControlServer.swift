@@ -238,7 +238,8 @@ private enum Router {
         let manager = SwitchManager.shared
         switch (req.method, action) {
         case ("POST", "on"), ("POST", "off"):
-            guard manager.isEnabled(sw) else { return jsonError(422, "switch is deactivated; enable it first") }
+            // 隐藏只是面板可见性，隐藏中的开关必须照常可开可关
+            //（否则"保持运行并隐藏"的开关会变成全 API 都关不掉）
             manager.setSwitch(sw, to: action == "on")
             return encode(200, dto(sw))
         case ("POST", "enable"), ("POST", "disable"):

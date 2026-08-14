@@ -19,7 +19,9 @@ opentoggle state keep-awake          # prints just the state
 opentoggle params keep-awake         # parameter keys, current values, options
 opentoggle set keep-awake mode=dis duration=120   # restarts a running switch with new values
 opentoggle enable wifi               # show in menu bar
-opentoggle disable wifi              # hide from menu bar (script kept)
+opentoggle disable wifi              # hide from the menu bar panel — visibility only:
+                                     # a RUNNING switch keeps running (and keeps
+                                     # restoring at launch); run `off` first to stop it
 opentoggle cat keep-awake            # print script source
 opentoggle rm my-switch              # delete (moves script to Trash)
 ```

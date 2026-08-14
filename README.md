@@ -73,7 +73,7 @@ A switch icon appears in the menu bar. First launch seeds a library of ready-to-
 | 🌐 Local HTTP Server | daemon | `python3 -m http.server` with port + directory parameters | deactivated |
 | 🛡 Web Proxy | toggle | System HTTP/HTTPS proxy with service / host / port parameters | deactivated |
 
-Deactivated switches stay out of the menu bar until you enable them (eye icon in the script manager sidebar). Create your own via **Manage Scripts**, or drop a script into the directory and hit reload.
+Hidden switches stay out of the menu bar panel until you show them again (eye icon in the script manager sidebar). Hiding is visibility-only — it never stops a running switch; the manager asks what to do when you hide one that is running. Create your own via **Manage Scripts**, or drop a script into the directory and hit reload.
 
 The preset scripts live in [`Sources/OpenToggle/Switches/`](Sources/OpenToggle/Switches/) as plain `.sh` files (bundled as SwiftPM resources at build time) — browse them as contract examples, or copy one into your scripts directory as a starting point.
 

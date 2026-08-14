@@ -56,13 +56,8 @@ private struct KeyPickerPopover: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Picker("", selection: $tab) {
-                Text(loc.s.tabCapture).tag(0)
-                Text(loc.s.tabCommonKeys).tag(1)
-                Text(loc.s.tabMouse).tag(2)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            OTSegmented(options: [loc.s.tabCapture, loc.s.tabCommonKeys, loc.s.tabMouse],
+                        selection: $tab)
 
             switch tab {
             case 0:
@@ -162,20 +157,22 @@ private struct CaptureArea: View {
                     .multilineTextAlignment(.center)
                 if let spec = KeySpec.parse(value), let text = spec.displayText {
                     Text(text)
-                        .font(.title3.weight(.semibold))
+                        .font(.system(size: 19, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .shadow(color: .white.opacity(0.55), radius: 7)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 130)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(capturing ? Color.accentColor.opacity(0.12)
-                                    : Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                RoundedRectangle(cornerRadius: 11)
+                    .fill(Color.white.opacity(capturing ? 0.055 : 0.03))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(capturing ? Color.accentColor : Color.clear,
+                RoundedRectangle(cornerRadius: 11)
+                    .strokeBorder(Color.white.opacity(capturing ? 0.6 : 0.25),
                                   style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
             )
+            .shadow(color: .white.opacity(capturing ? 0.12 : 0), radius: 9)
         }
         .buttonStyle(.plain)
         .onDisappear { stop() }

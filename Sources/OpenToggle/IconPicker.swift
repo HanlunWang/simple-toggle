@@ -52,13 +52,8 @@ private struct IconPickerPopover: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Picker("", selection: $tab) {
-                Text(loc.s.tabEmoji).tag(0)
-                Text(loc.s.tabSymbols).tag(1)
-                Text(loc.s.tabCustom).tag(2)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            OTSegmented(options: [loc.s.tabEmoji, loc.s.tabSymbols, loc.s.tabCustom],
+                        selection: $tab)
 
             switch tab {
             case 0:
@@ -128,6 +123,7 @@ private struct IconPickerPopover: View {
         value: () -> String
     ) -> some View {
         let v = value()
+        let selected = icon == v
         return Button {
             icon = v
             dismiss()
@@ -135,9 +131,14 @@ private struct IconPickerPopover: View {
             label()
                 .frame(width: 32, height: 32)
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(icon == v ? Color.accentColor.opacity(0.25) : Color.clear)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.white.opacity(selected ? 0.09 : 0.02))
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(selected ? Color.white.opacity(0.7) : OT.line, lineWidth: 1)
+                )
+                .shadow(color: .white.opacity(selected ? 0.15 : 0), radius: 5)
         }
         .buttonStyle(.plain)
         .help(v)

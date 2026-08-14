@@ -70,7 +70,7 @@ enum CLI {
             }
             for sw in switches {
                 let dot = ["on": "●", "off": "○", "error": "✗", "unknown": "?"][sw.state] ?? "?"
-                let enabled = sw.enabled ? "" : "  [deactivated]"
+                let enabled = sw.enabled ? "" : "  [hidden]"
                 print("\(dot) \(sw.id.padding(toLength: 22, withPad: " ", startingAt: 0)) \(sw.state.padding(toLength: 8, withPad: " ", startingAt: 0)) \(sw.type.padding(toLength: 7, withPad: " ", startingAt: 0)) \(sw.name)\(enabled)")
             }
             exit(0)
@@ -379,7 +379,8 @@ enum CLI {
       list                     list switches with state
       on|off <id>              turn a switch on/off
       state <id>               print on|off|error|unknown
-      enable|disable <id>      show/hide a switch in the menu bar
+      enable|disable <id>      show/hide in the menu bar panel (visibility only:
+                               disable does NOT stop a running switch — use off)
       params <id>              list parameters and current values
       set <id> k=v [...]       set parameter values (restarts a running switch)
       cat <id>                 print the script source

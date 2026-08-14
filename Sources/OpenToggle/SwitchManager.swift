@@ -241,11 +241,10 @@ final class SwitchManager: ObservableObject {
         !disabledIDs.contains(sw.id)
     }
 
-    /// 停用：从面板隐藏、停止轮询与恢复；开着的先关掉。脚本与配置保留。
+    /// 隐藏/显示：只是面板可见性——运行状态完全不受影响（不执行 off、
+    /// 照常轮询、照常随启动恢复、菜单栏图标照常）。
+    /// 隐藏运行中的 Wi-Fi 开关绝不能顺手把网断了。
     func setEnabled(_ sw: SwitchScript, _ enabled: Bool) {
-        if !enabled, states[sw.id] == .on {
-            setSwitch(sw, to: false)
-        }
         if enabled {
             disabledIDs.remove(sw.id)
         } else {
@@ -395,7 +394,13 @@ final class SwitchManager: ObservableObject {
         guard !isPolling else { return }
         isPolling = true
         let generation = stateGeneration
-        let toPoll = switches.filter { !disabledIDs.contains($0.id) }
+        // 隐藏 ≠ 停用：运行中（或 daemon 存活）的隐藏开关照常轮询，状态保持真实；
+        // 但已停止的隐藏开关退出轮询——不为看不见的东西每周期起子进程
+        let toPoll = switches.filter { sw in
+            !disabledIDs.contains(sw.id)
+                || states[sw.id] == .on
+                || daemons[sw.id] != nil
+        }
         let daemonAlive = daemons.mapValues { $0.isRunning }
         let envs = Dictionary(uniqueKeysWithValues: toPoll.map { ($0.id, environment(for: $0)) })
         Task.detached { [weak self] in
@@ -477,7 +482,7 @@ final class SwitchManager: ObservableObject {
     /// 启动时恢复上次的开/关状态
     private func restoreDesiredStates() {
         let desired = desiredStates()
-        for sw in switches where desired[sw.id] == true && !disabledIDs.contains(sw.id) {
+        for sw in switches where desired[sw.id] == true {
             switch sw.type {
             case .daemon:
                 spawnDaemon(sw)

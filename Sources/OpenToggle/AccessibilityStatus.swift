@@ -18,9 +18,10 @@ final class AccessibilityStatus: ObservableObject {
     }
 
     func refresh() {
-        // 等值守卫：避免无变化的 @Published 写入触发视图失效
+        // 等值守卫：避免无变化的 @Published 写入触发视图失效。
+        // 不过滤隐藏开关：隐藏的按键开关照样在跑、照样依赖权限
         let newNeeded = SwitchManager.shared.switches.contains { sw in
-            SwitchManager.shared.isEnabled(sw) && sw.params.contains { $0.type == .key }
+            sw.params.contains { $0.type == .key }
         }
         if needed != newNeeded { needed = newNeeded }
         let newTrusted = KeySpec.checkAccessibility(prompt: false)
@@ -65,25 +66,34 @@ struct AccessibilityBanner: View {
     @ObservedObject private var loc = Loc.shared
 
     var body: some View {
+        // 黑白语言下的警示 = 反白强调 + 虚线描边（见设计稿 A1），不引入色彩
         if status.needed && !status.trusted {
-            VStack(alignment: .leading, spacing: 6) {
-                Label(loc.s.axTitle, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text("!")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .shadow(color: .white.opacity(0.6), radius: 4)
+                    Text(loc.s.axTitle)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(OT.txt)
+                }
                 Text(loc.s.axDetail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(OT.txt2)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(loc.s.axGrant) {
+                OTChip(label: loc.s.axGrant, selected: true) {
                     status.requestAccess()
                 }
-                .controlSize(.small)
+                .padding(.top, 2)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.orange.opacity(0.12))
-            Divider()
+            .background(RoundedRectangle(cornerRadius: 11).fill(Color.white.opacity(0.045)))
+            .overlay(RoundedRectangle(cornerRadius: 11)
+                .strokeBorder(Color.white.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [5, 3])))
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
         }
     }
 }

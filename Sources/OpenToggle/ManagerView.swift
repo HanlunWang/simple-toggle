@@ -246,6 +246,8 @@ struct ManagerView: View {
     @State private var showDiscardDialog = false
     @State private var pendingAction: (() -> Void)?
     @State private var suppressSelectionChange = false
+    /// 待确认的"隐藏运行中开关"操作
+    @State private var pendingHide: SwitchScript?
 
     private var isDirty: Bool {
         guard let draft else { return false }
@@ -274,11 +276,19 @@ struct ManagerView: View {
                     }
                 )
             } else {
-                ContentUnavailableView(
-                    loc.s.selectPromptTitle,
-                    systemImage: "switch.2",
-                    description: Text(loc.s.selectPromptDetail)
-                )
+                VStack(spacing: 6) {
+                    Text(">_")
+                        .font(.system(size: 26, design: .monospaced))
+                        .foregroundStyle(OT.txt3)
+                    Text(loc.s.selectPromptTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(OT.txt)
+                    Text(loc.s.selectPromptDetail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(OT.txt2)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .otSurface()
             }
         }
         // 920 = 侧边栏最大 240 + 编辑区两栏最小 (330 + 340) 留有余量，任何拖拽组合都不溢出
@@ -322,6 +332,16 @@ struct ManagerView: View {
         .onAppear {
             manager.panelDidAppear()
         }
+        // 隐藏运行中的开关：状态即将失去可见性，由用户决定是否先停止
+        //（如 Keep Awake 设了"不限"，静默隐藏会导致屏幕永远不睡且无处可见）
+        .confirmationDialog(
+            String(format: loc.s.hideRunningTitleFormat, pendingHide?.name ?? ""),
+            isPresented: hidePresented
+        ) {
+            hideDialogButtons
+        } message: {
+            Text(loc.s.hideRunningMessage)
+        }
         .confirmationDialog(loc.s.discardTitle, isPresented: $showDiscardDialog) {
             Button(loc.s.discardConfirm, role: .destructive) {
                 pendingAction?()
@@ -346,46 +366,27 @@ struct ManagerView: View {
     }
 
     private var sidebar: some View {
-        List(selection: $selection) {
-            ForEach(manager.switches) { sw in
-                let enabled = manager.isEnabled(sw)
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(manager.states[sw.id] == .on ? Color.green : Color(nsColor: .tertiaryLabelColor))
-                        .frame(width: 6, height: 6)
-                    IconView(icon: sw.icon)
-                        .frame(width: 20)
-                    Text(sw.name)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(sw.type == .daemon ? "daemon" : "toggle")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                    Button {
-                        manager.setEnabled(sw, !enabled)
-                    } label: {
-                        Image(systemName: enabled ? "eye" : "eye.slash")
-                            .font(.caption)
-                            .foregroundStyle(enabled ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
-                    }
-                    .buttonStyle(.borderless)
-                    .help(enabled ? loc.s.hideFromMenuBar : loc.s.showInMenuBar)
-                }
-                .opacity(enabled ? 1 : 0.45)
-                .tag(sw.id)
-                .contextMenu {
-                    Button(enabled ? loc.s.hideFromMenuBar : loc.s.showInMenuBar) {
-                        manager.setEnabled(sw, !enabled)
-                    }
-                    Divider()
-                    Button(loc.s.deleteToTrash, role: .destructive) {
-                        delete(sw)
-                    }
+        // 自绘侧栏（不用 List）：宽度行为完全可控，杜绝系统 List 在
+        // 自定义行 + 弹性宽度组合下的头部裁切怪癖；样式也更贴设计稿 A3。
+        ScrollView {
+            VStack(spacing: 1) {
+                ForEach(manager.switches) { sw in
+                    SidebarRow(
+                        manager: manager,
+                        sw: sw,
+                        selected: selection == sw.id,
+                        onSelect: { selection = sw.id },
+                        onToggleVisibility: { requestVisibilityToggle(sw) },
+                        onDelete: { delete(sw) }
+                    )
                 }
             }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 6)
         }
+        .background(Color.black.opacity(0.18))
         .safeAreaInset(edge: .bottom) {
-            HStack {
+            HStack(spacing: 6) {
                 Button {
                     attempt {
                         if selection != nil {
@@ -398,9 +399,14 @@ struct ManagerView: View {
                         EditorState.shared.isDirty = false
                     }
                 } label: {
-                    Label(loc.s.newSwitch, systemImage: "plus")
+                    // 侧栏拖窄时自动降级为纯图标，避免底栏溢出
+                    ViewThatFits(in: .horizontal) {
+                        Label(loc.s.newSwitch, systemImage: "plus")
+                        Image(systemName: "plus")
+                    }
                 }
-                Spacer()
+                .help(loc.s.newSwitch)
+                Spacer(minLength: 0)
                 LanguageMenu()
                 Button {
                     NSWorkspace.shared.open(manager.scriptsDirectory)
@@ -410,8 +416,115 @@ struct ManagerView: View {
                 .help(loc.s.openFolderHelp)
             }
             .buttonStyle(.borderless)
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
             .background(.bar)
+        }
+    }
+
+    // 拆出弹窗子表达式，缓解 body 的类型检查负担（SourceKit 编辑器体验）
+    private var hidePresented: Binding<Bool> {
+        Binding(get: { pendingHide != nil },
+                set: { if !$0 { pendingHide = nil } })
+    }
+
+    @ViewBuilder
+    private var hideDialogButtons: some View {
+        Button(loc.s.hideAndStop) {
+            if let sw = pendingHide {
+                manager.setSwitch(sw, to: false)
+                manager.setEnabled(sw, false)
+            }
+            pendingHide = nil
+        }
+        Button(loc.s.hideKeepRunning) {
+            if let sw = pendingHide {
+                manager.setEnabled(sw, false)
+            }
+            pendingHide = nil
+        }
+        Button(loc.s.cancel, role: .cancel) { pendingHide = nil }
+    }
+
+    /// 隐藏入口：开关运行中 → 弹确认；关着 → 直接隐藏；显示 → 直接恢复
+    private func requestVisibilityToggle(_ sw: SwitchScript) {
+        if manager.isEnabled(sw) {
+            if manager.states[sw.id] == .on {
+                pendingHide = sw
+            } else {
+                manager.setEnabled(sw, false)
+            }
+        } else {
+            manager.setEnabled(sw, true)
+        }
+    }
+
+    private struct SidebarRow: View {
+        @ObservedObject var manager: SwitchManager
+        let sw: SwitchScript
+        let selected: Bool
+        let onSelect: () -> Void
+        let onToggleVisibility: () -> Void
+        let onDelete: () -> Void
+        @ObservedObject private var loc = Loc.shared
+        @State private var hovering = false
+
+        var body: some View {
+            let enabled = manager.isEnabled(sw)
+            HStack(spacing: 7) {
+                OTStatusMark(state: manager.states[sw.id] ?? .unknown)
+                    .frame(width: 10)
+                IconView(icon: sw.icon)
+                    .font(.system(size: 12))
+                    .frame(width: 17)
+                Text(sw.name)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(enabled ? OT.txt : OT.txt3)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 2)
+                Text(sw.type == .daemon ? "D" : "T")
+                    .font(.system(size: 8.5, design: .monospaced))
+                    .foregroundStyle(OT.txt3)
+                    .help(sw.type == .daemon ? "daemon" : "toggle")
+                Button(action: onToggleVisibility) {
+                    Image(systemName: enabled ? "eye" : "eye.slash")
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(enabled ? OT.txt2 : OT.txt3)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(enabled ? loc.s.hideFromMenuBar : loc.s.showInMenuBar)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5.5)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(selected ? Color.white.opacity(0.08)
+                          : hovering ? Color.white.opacity(0.035) : .clear)
+            )
+            .overlay(alignment: .leading) {
+                if selected {
+                    RoundedRectangle(cornerRadius: 1)
+                        .fill(Color.white.opacity(0.8))
+                        .frame(width: 2, height: 16)
+                        .shadow(color: .white.opacity(0.4), radius: 3)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onSelect)
+            .onHover { hovering = $0 }
+            // 自绘行的无障碍语义（List 原生提供，这里手动补上）
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(sw.name)
+            .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+            .contextMenu {
+                Button(enabled ? loc.s.hideFromMenuBar : loc.s.showInMenuBar,
+                       action: onToggleVisibility)
+                Divider()
+                Button(loc.s.deleteToTrash, role: .destructive, action: onDelete)
+            }
         }
     }
 
@@ -467,6 +580,7 @@ private struct EditorForm: View {
     @State private var statusMessage: String?
     @State private var statusIsError = false
     @State private var dismissTask: Task<Void, Never>?
+    @State private var headerExpanded = false
 
     private var isDirty: Bool { draft.fullScript() != savedSnapshot }
     private var s: S { loc.s }
@@ -476,133 +590,139 @@ private struct EditorForm: View {
         VStack(spacing: 0) {
             HSplitView {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 12) {
                         basicsSection
                         paramsSection
                         menubarSection
                     }
-                    .padding(16)
+                    .padding(14)
                 }
                 .frame(minWidth: 330, idealWidth: 400)
 
                 filePane
                     .frame(minWidth: 340)
             }
-            Divider()
+            Rectangle().fill(OT.line).frame(height: 1)
             footer
         }
+        .otSurface()
     }
 
     // MARK: 基本信息
 
-    private var basicsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .bottom, spacing: 10) {
-                    FieldColumn(s.nameLabel, detail: s.nameHelp) {
-                        TextField(s.namePlaceholder, text: $draft.name)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    FieldColumn(s.iconLabel, detail: s.iconHelp) {
-                        IconPickerButton(icon: $draft.icon)
-                    }
+    private var typeIndex: Binding<Int> {
+        Binding(
+            get: { draft.type == .toggle ? 0 : 1 },
+            set: { newIndex in
+                let old = draft.type
+                let new: SwitchType = newIndex == 0 ? .toggle : .daemon
+                guard old != new else { return }
+                draft.type = new
+                // 模板没被动过时，跟着类型切换模板
+                let oldTemplate = old == .toggle ? ScriptDraft.toggleTemplate : ScriptDraft.daemonTemplate
+                if draft.scriptBody == oldTemplate {
+                    draft.scriptBody = new == .toggle ? ScriptDraft.toggleTemplate : ScriptDraft.daemonTemplate
                 }
-                FieldColumn(s.typeLabel, detail: s.typeHelp) {
-                    Picker("", selection: $draft.type) {
-                        Text(s.typeToggle).tag(SwitchType.toggle)
-                        Text(s.typeDaemon).tag(SwitchType.daemon)
-                    }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    .onChange(of: draft.type) { old, new in
-                        // 模板没被动过时，跟着类型切换模板
-                        let oldTemplate = old == .toggle ? ScriptDraft.toggleTemplate : ScriptDraft.daemonTemplate
-                        if draft.scriptBody == oldTemplate {
-                            draft.scriptBody = new == .toggle ? ScriptDraft.toggleTemplate : ScriptDraft.daemonTemplate
-                        }
-                    }
-                }
-                Text(draft.type == .toggle ? s.toggleFootnote : s.daemonFootnote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-            .padding(6)
-        } label: {
-            Text(s.basicsTitle).font(.headline)
+        )
+    }
+
+    private var basicsSection: some View {
+        OTSection(title: s.basicsTitle) {
+            HStack(alignment: .bottom, spacing: 10) {
+                FieldColumn(s.nameLabel, detail: s.nameHelp) {
+                    TextField(s.namePlaceholder, text: $draft.name)
+                        .textFieldStyle(.roundedBorder)
+                }
+                FieldColumn(s.iconLabel, detail: s.iconHelp) {
+                    IconPickerButton(icon: $draft.icon)
+                }
+            }
+            FieldColumn(s.typeLabel, detail: s.typeHelp) {
+                OTSegmented(options: [s.typeToggle, s.typeDaemon], selection: typeIndex)
+            }
+            Text(draft.type == .toggle ? s.toggleFootnote : s.daemonFootnote)
+                .font(.system(size: 10))
+                .foregroundStyle(OT.txt3)
         }
     }
 
     // MARK: 参数
 
     private var paramsSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                if draft.params.isEmpty {
-                    Text(s.paramsEmpty)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                ForEach($draft.params) { $param in
-                    ParamDraftRow(param: $param) {
-                        draft.params.removeAll { $0.id == param.id }
-                    }
-                    if param.id != draft.params.last?.id {
-                        Divider()
-                    }
-                }
-                Button {
-                    draft.params.append(ParamDraft())
-                } label: {
-                    Label(s.addParam, systemImage: "plus")
-                }
-                .buttonStyle(.borderless)
+        OTSection(title: s.paramsTitle) {
+            if draft.params.isEmpty {
+                Text(s.paramsEmpty)
+                    .font(.system(size: 10))
+                    .foregroundStyle(OT.txt3)
             }
-            .padding(6)
-        } label: {
-            Text(s.paramsTitle).font(.headline)
+            ForEach($draft.params) { $param in
+                ParamDraftRow(param: $param) {
+                    draft.params.removeAll { $0.id == param.id }
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.18)))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(OT.line, lineWidth: 1))
+            }
+            OTChip(label: "＋ " + s.addParam, dashed: true) {
+                draft.params.append(ParamDraft())
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
     // MARK: 菜单栏行为
 
-    private var menubarSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                FieldColumn("", detail: s.modeHelp) {
-                    Picker("", selection: $draft.menubarMode) {
-                        Text(s.modeNone).tag("none")
-                        Text(s.modeAdd).tag("add")
-                        Text(s.modeReplace).tag("replace")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .onChange(of: draft.menubarMode) { _, new in
-                        if new != "none", draft.menubarIcon.isEmpty {
-                            draft.menubarIcon = draft.icon
-                        }
-                    }
+    private var menubarModeIndex: Binding<Int> {
+        Binding(
+            get: { ["none", "add", "replace"].firstIndex(of: draft.menubarMode) ?? 0 },
+            set: { newIndex in
+                draft.menubarMode = ["none", "add", "replace"][newIndex]
+                if draft.menubarMode != "none", draft.menubarIcon.isEmpty {
+                    draft.menubarIcon = draft.icon
                 }
-                if draft.menubarMode != "none" {
+            }
+        )
+    }
+
+    private var menubarSection: some View {
+        OTSection(title: s.menubarTitle) {
+            HStack(spacing: 4) {
+                OTSegmented(options: [s.modeNone, s.modeAdd, s.modeReplace], selection: menubarModeIndex)
+                HelpButton(title: s.menubarTitle, text: s.modeHelp)
+            }
+            if draft.menubarMode != "none" {
+                HStack(spacing: 12) {
                     FieldColumn(s.menubarIconLabel, detail: s.iconHelp) {
                         IconPickerButton(icon: $draft.menubarIcon)
                     }
-                    HStack(spacing: 4) {
-                        Toggle(s.countdownToggle, isOn: $draft.countdown)
-                            .font(.callout)
-                        HelpButton(title: s.countdownToggle, text: s.countdownHelp)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Spacer(minLength: 0)
+                        HStack(spacing: 6) {
+                            Toggle("", isOn: $draft.countdown)
+                                .toggleStyle(OTGlowToggleStyle(small: true))
+                                .labelsHidden()
+                            Text(s.countdownToggle)
+                                .font(.system(size: 11))
+                                .foregroundStyle(OT.txt2)
+                            HelpButton(title: s.countdownToggle, text: s.countdownHelp)
+                        }
                     }
-                    if draft.countdown {
-                        let hasDuration = draft.params.contains { $0.key == "duration" && $0.type == .number }
-                        Label(hasDuration ? s.countdownOK : s.countdownMissing,
-                              systemImage: hasDuration ? "checkmark.circle" : "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(hasDuration ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+                }
+                if draft.countdown {
+                    let hasDuration = draft.params.contains { $0.key == "duration" && $0.type == .number }
+                    // 缺依赖的警示：反白 ! 强调，不用色彩
+                    HStack(spacing: 5) {
+                        Text(hasDuration ? "✓" : "!")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(hasDuration ? OT.txt3 : .white)
+                            .shadow(color: .white.opacity(hasDuration ? 0 : 0.5), radius: 3)
+                        Text(hasDuration ? s.countdownOK : s.countdownMissing)
+                            .font(.system(size: 10))
+                            .foregroundStyle(hasDuration ? OT.txt3 : OT.txt2)
                     }
                 }
             }
-            .padding(6)
-        } label: {
-            Text(s.menubarTitle).font(.headline)
         }
     }
 
@@ -610,97 +730,146 @@ private struct EditorForm: View {
 
     private var filePane: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 6) {
                 Image(systemName: "doc.plaintext")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(OT.txt3)
                 Text(draft.fileName)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(OT.txt2)
+                    .lineLimit(1)
                 HelpButton(title: draft.fileName, text: s.scriptFileHelp)
-                Spacer()
-                if !draft.envNames.isEmpty {
-                    HStack(spacing: 4) {
-                        Text(s.envVarsLabel)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                        ForEach(draft.envNames, id: \.self) { env in
-                            Text("$" + env)
-                                .font(.caption2.monospaced())
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                        }
+                Spacer(minLength: 0)
+            }
+            // 注入变量：流式换行，窗口再窄也不溢出
+            if !draft.envNames.isEmpty {
+                WrapLayout(spacing: 4) {
+                    Text(s.envVarsLabel)
+                        .font(.system(size: 9))
+                        .foregroundStyle(OT.txt3)
+                        .padding(.vertical, 2)
+                    ForEach(draft.envNames, id: \.self) { env in
+                        Text("$" + env)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(OT.txt3)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(OT.line, lineWidth: 1))
                     }
-                    .help(s.envVarsHelp)
                 }
+                .help(s.envVarsHelp)
             }
 
             VStack(alignment: .leading, spacing: 0) {
-                // 契约头：由左侧表单自动生成，只读（完整显示，长行自动换行）
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(draft.headerLines().enumerated()), id: \.offset) { _, line in
-                        Text(line)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(line.hasPrefix("#!")
-                                             ? Color(red: 0.78, green: 0.57, blue: 0.92)
-                                             : Color(red: 0.45, green: 0.64, blue: 0.39))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
+                // 契约头：由左侧表单自动生成，只读。
+                // 可折叠（参数多时会很长）；展开态内部滚动、封顶高度，不挤压代码区。
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { headerExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(OT.txt3)
+                            .rotationEffect(.degrees(headerExpanded ? 90 : 0))
+                        Text(String(format: s.contractHeaderFormat, draft.headerLines().count))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(OT.txt3)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
                 }
-                .padding(10)
-                .padding(.trailing, 80) // 给"自动生成"角标留位
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(red: 0.09, green: 0.10, blue: 0.12))
-                .overlay(alignment: .topTrailing) {
-                    Text(s.autoGenerated)
-                        .font(.caption2)
-                        .foregroundStyle(Color(white: 0.45))
-                        .padding(6)
+                .buttonStyle(.plain)
+                .background(Color.black.opacity(0.42))
+
+                if headerExpanded {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(draft.headerLines().enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.system(size: 11.5, design: .monospaced))
+                                    .foregroundColor(line.hasPrefix("#!") ? OT.txt2 : OT.txt3)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 150)
+                    .background(Color.black.opacity(0.42))
                 }
 
-                Divider().overlay(Color(white: 0.25))
+                Rectangle().fill(OT.line).frame(height: 1)
 
-                // 脚本体：真正的代码编辑区
-                CodeEditor(text: $draft.scriptBody)
-                    .frame(minHeight: 220)
+                // 脚本体：单色分层语法高亮（注释 32% / 字符串 58% / 变量 80% / 关键字加粗全白）
+                ShellCodeEditor(text: $draft.scriptBody)
+                    .frame(minHeight: 200)
             }
-            .background(Color(red: 0.12, green: 0.13, blue: 0.16))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(Color.black.opacity(0.30))
+            .clipShape(RoundedRectangle(cornerRadius: 11))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color(white: 0.3), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 11)
+                    .strokeBorder(OT.line, lineWidth: 1)
             )
         }
-        .padding(16)
+        .padding(14)
     }
 
     // MARK: 底栏
 
+    private var canSave: Bool {
+        !draft.name.trimmingCharacters(in: .whitespaces).isEmpty && isDirty
+    }
+
     private var footer: some View {
-        HStack {
+        HStack(spacing: 9) {
             if let statusMessage {
-                Label(statusMessage,
-                      systemImage: statusIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(statusIsError ? .orange : .green)
-                    .font(.callout)
-                    .transition(.opacity)
+                HStack(spacing: 5) {
+                    Text(statusIsError ? "!" : "✓")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .shadow(color: .white.opacity(0.5), radius: 3)
+                    Text(statusMessage)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(OT.txt2)
+                        .lineLimit(1)
+                }
+                .transition(.opacity)
             } else if isDirty, draft.sourceURL != nil {
-                Text(s.unsavedHint)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Text("● " + s.unsavedHint)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(OT.txt3)
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let url = draft.sourceURL {
                 Button(s.revealInFinder) {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(OT.txt2)
             }
-            Button(draft.sourceURL == nil ? s.createButton : s.saveButton) { save() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(draft.name.trimmingCharacters(in: .whitespaces).isEmpty || !isDirty)
+            Button { save() } label: {
+                Text(draft.sourceURL == nil ? s.createButton : s.saveButton)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Color.black.opacity(0.88))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.92)))
+                    .shadow(color: .white.opacity(0.25), radius: 6)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.defaultAction)
+            .disabled(!canSave)
+            .opacity(canSave ? 1 : 0.35)
         }
-        .padding(12)
-        .background(.bar)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.25))
         .animation(.easeInOut(duration: 0.2), value: statusMessage)
     }
 
@@ -736,22 +905,6 @@ private struct EditorForm: View {
             guard !Task.isCancelled else { return }
             statusMessage = nil
         }
-    }
-}
-
-// MARK: - 深色代码编辑器
-
-private struct CodeEditor: View {
-    @Binding var text: String
-
-    var body: some View {
-        TextEditor(text: $text)
-            .font(.system(size: 12.5, design: .monospaced))
-            .foregroundColor(Color(white: 0.92))
-            .scrollContentBackground(.hidden)
-            .background(Color(red: 0.12, green: 0.13, blue: 0.16))
-            .lineSpacing(2)
-            .padding(6)
     }
 }
 
@@ -883,13 +1036,13 @@ struct FieldColumn<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             if !title.isEmpty || detail != nil {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     if !title.isEmpty {
                         Text(title)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10))
+                            .foregroundStyle(OT.txt3)
                     }
                     if let detail {
                         HelpButton(title: title, text: detail)
