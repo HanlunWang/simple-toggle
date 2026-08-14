@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Lint preset switch scripts
+        run: |
+          for f in Sources/OpenToggle/Switches/*.sh; do
+            bash -n "$f"
+            .build/release/OpenToggle validate "$f"
+          done
