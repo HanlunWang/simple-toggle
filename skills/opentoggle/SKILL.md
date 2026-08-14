@@ -72,8 +72,21 @@ Scripts are `chmod 755` on install. Saving over a running switch restarts it wit
 ### Conventions
 
 - Prefer zero-permission mechanisms (`defaults`, `caffeinate`, `networksetup`, `osascript` volume). Note in a comment when a script triggers a permission prompt (e.g. System Events automation).
-- Keep `status` fast (<1 s) and side-effect free.
-- For daemons, never wrap the long-running process in a loop without `exec`ing it, unless the loop itself is the process.
+- Keep `status` fast (<1 s) and side-effect free. Keep stdout/stderr output small — it is not a log channel.
+- **Daemon signal discipline** — the app stops a daemon with SIGTERM; pick one of two patterns:
+  - *Single process*: `exec` the long-running command so the signal reaches it directly.
+  - *Loop / multi-process*: trap and clean up explicitly. Run blocking waits as `sleep N & wait $!` (interruptible), and kill every helper you started in the trap:
+
+    ```bash
+    HELPER_PID=""
+    cleanup() { [ -n "$HELPER_PID" ] && kill "$HELPER_PID" 2>/dev/null; pkill -P $$ 2>/dev/null; }
+    trap 'cleanup; exit 0' TERM INT
+    trap 'cleanup' EXIT
+    caffeinate -d -w $$ & HELPER_PID=$!   # tie helpers to this process AND kill them in cleanup
+    while :; do sleep "$INTERVAL" & wait $!; do_work; done
+    ```
+- **Never leave system-state helpers unowned.** Anything that holds system state while running (`caffeinate` sleep assertions, proxies enabled in `on`, servers) must be released on every exit path — tie process helpers to the script's lifetime (`caffeinate -w $$`) *and* kill them in the trap; belt and suspenders. The app additionally journals daemon PIDs and sweeps leftovers from a crashed previous instance at launch, but scripts should not rely on that.
+- `opentoggle doctor` reports running daemons, flags orphans, and counts `caffeinate` sleep assertions — use it when diagnosing "the screen stays awake" or "the switch looks off but something is still running".
 - Reference examples live in `Sources/OpenToggle/Switches/` of the repo.
 
 ## HTTP API (advanced)
