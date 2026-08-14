@@ -69,6 +69,13 @@ cat > "$STAGE/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# ---- 出厂断言：资源包必须在 bundle 里（v0.5.0 教训：编译机上的 dev
+#      回退路径会掩盖资源缺失，只有别人的机器会崩） ----
+if [ ! -d "$STAGE/Contents/Resources/${APP_NAME}_${APP_NAME}.bundle" ]; then
+  echo "✗ 资源包未打进 app（Contents/Resources/${APP_NAME}_${APP_NAME}.bundle 缺失）"
+  exit 1
+fi
+
 # ---- 签名（公证硬性要求：hardened runtime + 安全时间戳） ----
 echo "==> Codesigning (hardened runtime)"
 codesign --force --sign "$IDENTITY" --identifier "$BUNDLE_ID" \
