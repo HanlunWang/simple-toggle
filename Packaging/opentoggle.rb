@@ -17,7 +17,7 @@ cask "opentoggle" do
   desc "Script-powered menu bar switches with managed lifecycle"
   homepage "https://github.com/HanlunWang/open-toggle"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "OpenToggle.app"
   # CLI：opentoggle 命令直接可用（同一二进制）
