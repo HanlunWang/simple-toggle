@@ -35,6 +35,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Format
+        run: test -z "$(gofmt -l app cmd internal spikes)" || { gofmt -l app cmd internal spikes; exit 1; }
+
       - name: Vet
         run: go vet ./...
 

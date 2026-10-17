@@ -25,12 +25,13 @@ type Fingerprint struct {
 
 func (f Fingerprint) Key() string { return "" }
 
-func AccessibilityTrusted() bool                  { return false }
-func PostKey(uint16, uint64) PostResult           { return NotTrusted }
-func PostMouse(int) PostResult                    { return NotTrusted }
-func IdleSeconds() (float64, bool)                { return 0, false }
-func Trash(path string) error                     { return os.Remove(path) }
-func WiFi() (string, string, error)               { return "", "", errUnsupported }
-func LocationStatus() (int, error)                { return -1, errUnsupported }
-func RequestLocation() error                      { return errUnsupported }
-func NetworkFingerprint() (Fingerprint, error)    { return Fingerprint{}, errUnsupported }
+func AccessibilityTrusted() bool               { return false }
+func RequestAccessibility() bool               { return false }
+func PostKey(uint16, uint64) PostResult        { return NotTrusted }
+func PostMouse(int) PostResult                 { return NotTrusted }
+func IdleSeconds() (float64, bool)             { return 0, false }
+func Trash(path string) error                  { return os.Remove(path) }
+func WiFi() (string, string, error)            { return "", "", errUnsupported }
+func LocationStatus() (int, error)             { return -1, errUnsupported }
+func RequestLocation() error                   { return errUnsupported }
+func NetworkFingerprint() (Fingerprint, error) { return Fingerprint{}, errUnsupported }

@@ -1,6 +1,6 @@
 #!/bin/bash
 # <switch.name> Show Hidden Files
-# <switch.icon> 👁️
+# <switch.icon> lucide:eye
 # <switch.type> toggle
 #
 # Toggle contract: OpenToggle invokes `<script> on | off | status`.

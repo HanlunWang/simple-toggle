@@ -25,8 +25,8 @@ func HasErrors(issues []Issue) bool {
 }
 
 var (
-	reTrapTerm  = regexp.MustCompile(`trap\b.*\b(SIG)?(TERM|INT)\b`)
-	reCaseArg   = regexp.MustCompile(`case\s+"?\$\{?1\}?"?\s+in`)
+	reTrapTerm   = regexp.MustCompile(`trap\b.*\b(SIG)?(TERM|INT)\b`)
+	reCaseArg    = regexp.MustCompile(`case\s+"?\$\{?1\}?"?\s+in`)
 	reKeyUnusual = regexp.MustCompile(`[^\p{L}\p{N}_-]`)
 )
 

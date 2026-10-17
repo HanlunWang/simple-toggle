@@ -34,9 +34,9 @@ type Meta struct {
 	Group    string `json:"group,omitempty"`
 	Order    int    `json:"order,omitempty"`
 	Shortcut string `json:"shortcut,omitempty"`
-	Confirm  bool   `json:"confirm,omitempty"`  // 运行前确认
-	Notify   string `json:"notify,omitempty"`   // never | fail | always；空 = 跟随全局
-	Timeout  int    `json:"timeout,omitempty"`  // 秒；0 = 默认
+	Confirm  bool   `json:"confirm,omitempty"` // 运行前确认
+	Notify   string `json:"notify,omitempty"`  // never | fail | always；空 = 跟随全局
+	Timeout  int    `json:"timeout,omitempty"` // 秒；0 = 默认
 }
 
 type state struct {

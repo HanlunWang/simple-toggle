@@ -1,4 +1,4 @@
-// opentoggle 是 OpenToggle 的唯一二进制：菜单栏 app（M2 起）、命令行与 MCP 服务器。
+// opentoggle 是 OpenToggle 的唯一二进制：菜单栏 app、命令行与 MCP 服务器。
 package main
 
 import (
@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/egoist/mygo"
+
+	"github.com/HanlunWang/open-toggle/app"
 	"github.com/HanlunWang/open-toggle/internal/api"
 	"github.com/HanlunWang/open-toggle/internal/cli"
 	"github.com/HanlunWang/open-toggle/internal/engine"
@@ -23,9 +28,17 @@ import (
 )
 
 func main() {
+	if v := mygo.App.Version(); v != "" {
+		version.Version = v
+	}
 	args := os.Args[1:]
 	if len(args) == 0 {
-		os.Exit(cli.Run([]string{"help"}, &cli.Env{Out: os.Stdout, Err: os.Stderr}))
+		// 终端里不带参数：打印帮助；从 Finder、Dock 或开机启动（没有终端）：启动 app
+		if isTerminal(os.Stdout) {
+			os.Exit(cli.Run([]string{"help"}, &cli.Env{Out: os.Stdout, Err: os.Stderr}))
+		}
+		runGUI()
+		return
 	}
 	switch args[0] {
 	case "mcp":
@@ -40,8 +53,18 @@ func main() {
 			os.Exit(1)
 		}
 	case "gui":
-		fmt.Fprintln(os.Stderr, "the OpenToggle v2 menu bar app arrives in milestone M2; use `opentoggle serve` for a headless engine")
-		os.Exit(1)
+		// 经软链接（如 Homebrew 的 /opt/homebrew/bin/opentoggle）调用打包好的 app 时，
+		// 交给 LaunchServices 按 app 身份启动；否则偏好设置、权限都会落到错误的身份上
+		exe, _ := os.Executable()
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil && resolved != exe {
+			if i := strings.Index(resolved, ".app/Contents/MacOS/"); i >= 0 {
+				if err := exec.Command("/usr/bin/open", "-a", resolved[:i+4]).Run(); err != nil {
+					log.Fatal(err)
+				}
+				return
+			}
+		}
+		runGUI()
 	default:
 		os.Exit(cli.Run(args, &cli.Env{Out: os.Stdout, Err: os.Stderr}))
 	}
@@ -102,4 +125,15 @@ func serve(args []string) error {
 	eng.Shutdown()
 	srv.Close()
 	return nil
+}
+
+func runGUI() {
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }

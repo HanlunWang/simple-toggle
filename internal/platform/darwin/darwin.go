@@ -80,6 +80,46 @@ func AccessibilityTrusted() bool {
 	return axIsProcessTrustedWithOptions(0)
 }
 
+var (
+	promptOnce sync.Once
+	promptDict uintptr
+)
+
+// RequestAccessibility 弹出系统的辅助功能授权提示（并把 app 加进系统设置的列表），
+// 返回当前是否已授权。只应由用户在 app 里主动触发；命令行进程不调用它。
+func RequestAccessibility() bool {
+	if load() != nil {
+		return false
+	}
+	promptOnce.Do(func() {
+		hi, err := purego.Dlopen(frameworks+"ApplicationServices.framework/Frameworks/HIServices.framework/HIServices", rtld)
+		if err != nil {
+			return
+		}
+		cf, err := purego.Dlopen(frameworks+"CoreFoundation.framework/CoreFoundation", rtld)
+		if err != nil {
+			return
+		}
+		keyPtr, err1 := purego.Dlsym(hi, "kAXTrustedCheckOptionPrompt")
+		truePtr, err2 := purego.Dlsym(cf, "kCFBooleanTrue")
+		keyCB, err3 := purego.Dlsym(cf, "kCFTypeDictionaryKeyCallBacks")
+		valCB, err4 := purego.Dlsym(cf, "kCFTypeDictionaryValueCallBacks")
+		if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+			return
+		}
+		var create func(alloc uintptr, keys, values *uintptr, n int, kcb, vcb uintptr) uintptr
+		purego.RegisterLibFunc(&create, cf, "CFDictionaryCreate")
+		// 两个符号都是 C 全局变量（CFStringRef / CFBooleanRef），地址固定：读出变量里的指针值
+		k := **(**uintptr)(unsafe.Pointer(&keyPtr))
+		v := **(**uintptr)(unsafe.Pointer(&truePtr))
+		promptDict = create(0, &k, &v, 1, keyCB, valCB)
+	})
+	if promptDict == 0 {
+		return axIsProcessTrustedWithOptions(0)
+	}
+	return axIsProcessTrustedWithOptions(promptDict)
+}
+
 // PostResult 是一次合成的结果。CGEventPost 没有返回值，被系统丢弃时毫无声响，
 // 所以用「距上一次该类输入的时间」是否归零来判断事件是否真的送达。
 type PostResult int

@@ -1,0 +1,19 @@
+{
+  "name": "OpenToggle",
+  "identifier": "io.github.hanlunwang.OpenToggle",
+  "version": "2.0.0",
+  "copyright": "© 2026 Hanlun Wang",
+  "icon": "resources/icon.png",
+  "main": "./cmd/opentoggle",
+  "out": "build",
+  "macos": {
+    "minimumSystemVersion": "14.0",
+    "infoPlist": {
+      "LSUIElement": true,
+      "LSApplicationCategoryType": "public.app-category.utilities",
+      "NSAppleEventsUsageDescription": "Your switch scripts may control other apps (for example System Events for Dark Mode).",
+      "NSLocationWhenInUseUsageDescription": "Only used when you create a rule that matches a Wi-Fi network by name.",
+      "NSLocationUsageDescription": "Only used when you create a rule that matches a Wi-Fi network by name."
+    }
+  }
+}

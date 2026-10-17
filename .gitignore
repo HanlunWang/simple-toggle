@@ -1,3 +1,7 @@
 .build/
 .swiftpm/
 dist/
+
+# v2 (Go / mygo)
+/build/
+/.mygo/
