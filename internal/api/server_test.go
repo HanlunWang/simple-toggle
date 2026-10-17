@@ -1,0 +1,236 @@
+package api
+
+import (
+	"bufio"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/HanlunWang/open-toggle/internal/engine"
+	"github.com/HanlunWang/open-toggle/internal/keys"
+	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/open-toggle/internal/store"
+)
+
+type env struct {
+	t    *testing.T
+	ts   *httptest.Server
+	s    *Server
+	dir  string
+	disc string
+	post darwin.PostResult
+}
+
+func newEnv(t *testing.T) *env {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "switches")
+	os.MkdirAll(dir, 0o755)
+	mark := filepath.Join(root, "lamp.on")
+	os.WriteFile(filepath.Join(dir, "lamp.sh"), []byte(`#!/bin/sh
+# <switch.name> Lamp
+# <switch.icon> sf:moon.fill
+# <switch.param> key=mode type=select label=Mode default=a options="A=a|B=b"
+case "$1" in on) touch `+mark+` ;; off) rm -f `+mark+` ;; status) [ -f `+mark+` ] && echo on || echo off ;; esac
+`), 0o755)
+	os.WriteFile(filepath.Join(dir, "摸鱼.sh"), []byte("#!/bin/sh\n# <switch.name> 摸鱼\n# <switch.type> action\necho \"fish $OPENTOGGLE_TRIGGER\"\n"), 0o755)
+	st, _ := store.Open(filepath.Join(root, "data"))
+	eng := engine.New(engine.Config{ScriptsDir: dir, LedgerPath: filepath.Join(root, "daemons.json"), Store: st,
+		PollHidden: time.Hour, PollVisible: time.Hour})
+	if err := eng.Start(); err != nil {
+		t.Fatal(err)
+	}
+	e := &env{t: t, dir: dir, disc: filepath.Join(root, "api.json"), post: darwin.Delivered}
+	e.s = New(eng, Options{DiscoveryPath: e.disc, Version: "2.0.0-test", Store: st,
+		PostKey: func(keys.Spec) darwin.PostResult { return e.post }, AXTrusted: func() bool { return true }})
+	e.ts = httptest.NewServer(e.s.Handler())
+	t.Cleanup(func() { e.ts.Close(); eng.Shutdown() })
+	return e
+}
+
+func (e *env) do(method, path, body string, auth bool, client string) (int, string) {
+	e.t.Helper()
+	req, _ := http.NewRequest(method, e.ts.URL+path, strings.NewReader(body))
+	if auth {
+		req.Header.Set("Authorization", "Bearer "+e.s.Token())
+	}
+	if client != "" {
+		req.Header.Set(HeaderClient, client)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func TestAuthAndHost(t *testing.T) {
+	e := newEnv(t)
+	if code, _ := e.do("POST", "/v1/switches/lamp/on", "", false, ""); code != 401 {
+		t.Fatalf("write without token: %d", code)
+	}
+	if code, _ := e.do("GET", "/v1/switches", "", false, ""); code != 200 {
+		t.Fatalf("read without token: %d", code)
+	}
+	if code, _ := e.do("POST", "/v1/validate", "#!/bin/sh\n# <switch.name> A\necho status\n", false, ""); code != 200 {
+		t.Fatalf("validate should not need a token: %d", code)
+	}
+	req, _ := http.NewRequest("GET", e.ts.URL+"/v1/switches", nil)
+	req.Host = "evil.example:43737"
+	resp, _ := http.DefaultClient.Do(req)
+	if resp.StatusCode != 403 {
+		t.Fatalf("foreign Host: %d", resp.StatusCode)
+	}
+}
+
+func TestV1Compat(t *testing.T) {
+	e := newEnv(t)
+	code, body := e.do("GET", "/v1/switches", "", false, "")
+	var list []map[string]any
+	if code != 200 || json.Unmarshal([]byte(body), &list) != nil || len(list) != 2 {
+		t.Fatalf("%d %s", code, body)
+	}
+	lamp := list[0]
+	for _, k := range []string{"enabled", "icon", "id", "name", "params", "state", "type"} {
+		if _, ok := lamp[k]; !ok {
+			t.Errorf("v1 switch DTO missing %q", k)
+		}
+	}
+	param := lamp["params"].([]any)[0].(map[string]any)
+	if param["defaultValue"] != "a" || param["value"] != "a" || len(param["options"].([]any)) != 2 {
+		t.Errorf("param DTO %v", param)
+	}
+	if code, body := e.do("POST", "/v1/switches/lamp/on", "", true, "cli"); code != 200 || !strings.Contains(body, `"state": "on"`) {
+		t.Fatalf("on: %d %s", code, body)
+	}
+	if code, body := e.do("PUT", "/v1/switches/lamp.sh/params", `{"mode":"b"}`, true, ""); code != 200 || !strings.Contains(body, `"value": "b"`) {
+		t.Fatalf("params: %d %s", code, body)
+	}
+	if code, body := e.do("PUT", "/v1/switches/lamp/params", `{"nope":1}`, true, ""); code != 422 || !strings.Contains(body, `switch has no param with key \"nope\"`) {
+		t.Fatalf("unknown param: %d %s", code, body)
+	}
+	if code, body := e.do("GET", "/v1/switches/ghost", "", false, ""); code != 404 || !strings.Contains(body, `no switch with id \"ghost\"`) {
+		t.Fatalf("404: %d %s", code, body)
+	}
+	if code, body := e.do("GET", "/v1/switches/"+url.PathEscape("摸鱼.sh"), "", false, ""); code != 200 || !strings.Contains(body, `"type": "action"`) {
+		t.Fatalf("CJK id: %d %s", code, body)
+	}
+	if code, body := e.do("POST", "/v1/switches/lamp/disable", "", true, ""); code != 200 || !strings.Contains(body, `"enabled": false`) {
+		t.Fatalf("disable: %d %s", code, body)
+	}
+	if code, body := e.do("GET", "/v1/switches/lamp/script", "", false, ""); code != 200 || !strings.HasPrefix(body, "#!/bin/sh") {
+		t.Fatalf("script: %d", code)
+	}
+	if code, body := e.do("PUT", "/v1/switches/lamp/script", "#!/bin/sh\necho no name\n", true, ""); code != 422 || !strings.Contains(body, `"valid": false`) {
+		t.Fatalf("lint reject: %d %s", code, body)
+	}
+	newScript := "#!/bin/sh\n# <switch.name> New One\n# <switch.type> action\necho ok\n"
+	if code, body := e.do("POST", "/v1/scripts", newScript, true, ""); code != 201 || !strings.Contains(body, `"id": "new-one.sh"`) {
+		t.Fatalf("create: %d %s", code, body)
+	}
+	if code, _ := e.do("DELETE", "/v1/switches/new-one", "", true, ""); code != 200 {
+		t.Fatalf("delete: %d", code)
+	}
+	if code, body := e.do("POST", "/v1/switches/"+url.PathEscape("摸鱼")+"/on", "", true, ""); code != 409 {
+		t.Fatalf("on for an action: %d %s", code, body)
+	}
+	if code, body := e.do("GET", "/v1/ping", "", false, ""); code != 200 || !strings.Contains(body, `"version":"2.0.0-test"`) {
+		t.Fatalf("ping: %s", body)
+	}
+}
+
+func TestV2RunAndRuns(t *testing.T) {
+	e := newEnv(t)
+	code, body := e.do("POST", "/v2/switches/"+url.PathEscape("摸鱼")+"/run", "", true, "mcp/Claude Code")
+	if code != 200 || !strings.Contains(body, "fish ai") || !strings.Contains(body, `"detail": "Claude Code"`) {
+		t.Fatalf("run: %d %s", code, body)
+	}
+	e.do("POST", "/v1/switches/lamp/on", "", true, "cli/agent:Codex")
+	code, body = e.do("GET", "/v2/runs?limit=5", "", false, "")
+	var runs []map[string]any
+	if code != 200 || json.Unmarshal([]byte(body), &runs) != nil || len(runs) < 2 {
+		t.Fatalf("runs: %d %s", code, body)
+	}
+	if runs[0]["source"] != "ai" || runs[0]["detail"] != "Codex · CLI" {
+		t.Fatalf("agent CLI source: %v", runs[0])
+	}
+	code, body = e.do("GET", "/v2/switches/lamp", "", false, "")
+	if code != 200 || !strings.Contains(body, `"kind": "lucide"`) || !strings.Contains(body, `"value": "moon"`) || !strings.Contains(body, `"lastRun"`) {
+		t.Fatalf("v2 switch: %s", body)
+	}
+}
+
+func TestPress(t *testing.T) {
+	e := newEnv(t)
+	if code, body := e.do("POST", "/v1/press", "cmd+shift+k", true, ""); code != 200 || !strings.Contains(body, `"key":"cmd+shift+k"`) {
+		t.Fatalf("%d %s", code, body)
+	}
+	if code, _ := e.do("POST", "/v1/press", "hyper+q", true, ""); code != 400 {
+		t.Fatal("bad spec accepted")
+	}
+	e.post = darwin.NotTrusted
+	if code, body := e.do("POST", "/v1/press", "f15", true, ""); code != 403 || !strings.Contains(body, "accessibility permission not granted") {
+		t.Fatalf("%d %s", code, body)
+	}
+}
+
+func TestEventsStream(t *testing.T) {
+	e := newEnv(t)
+	resp, err := http.Get(e.ts.URL + "/v2/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		e.do("POST", "/v2/switches/"+url.PathEscape("摸鱼")+"/run", "", true, "")
+	}()
+	sc := bufio.NewScanner(resp.Body)
+	deadline := time.After(5 * time.Second)
+	lines := make(chan string)
+	go func() {
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+	}()
+	for {
+		select {
+		case l := <-lines:
+			if l == "event: run" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("no run event")
+		}
+	}
+}
+
+func TestDiscoveryFile(t *testing.T) {
+	e := newEnv(t)
+	e.s.opts.Port = 0 // 测试中不真正监听固定端口
+	if err := e.s.writeDiscovery(); err != nil {
+		t.Fatal(err)
+	}
+	fi, _ := os.Stat(e.disc)
+	if fi.Mode().Perm() != 0o600 {
+		t.Fatalf("discovery file mode %v", fi.Mode().Perm())
+	}
+	d, _ := ReadDiscovery(e.disc)
+	if d.Token != e.s.Token() {
+		t.Fatal("token not written")
+	}
+	// 重启后沿用同一令牌
+	again := New(nil, Options{DiscoveryPath: e.disc})
+	if again.Token() != e.s.Token() {
+		t.Fatal("token not reused")
+	}
+}

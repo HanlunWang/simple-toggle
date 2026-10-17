@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
   pull_request:
 
 jobs:
@@ -22,4 +22,29 @@ jobs:
           for f in Sources/OpenToggle/Switches/*.sh; do
             bash -n "$f"
             .build/release/OpenToggle validate "$f"
+          done
+
+  go:
+    # v2（Go 重写）：引擎、API、CLI、MCP 的单元测试与端到端验收
+    if: hashFiles('go.mod') != ''
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test -race -count=1 ./...
+
+      - name: Lint preset switch scripts
+        run: |
+          go build -o /tmp/opentoggle ./cmd/opentoggle
+          for f in internal/presets/switches/*.sh; do
+            bash -n "$f"
+            /tmp/opentoggle validate "$f"
           done
