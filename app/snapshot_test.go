@@ -8,6 +8,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/store"
 )
@@ -78,6 +79,39 @@ func TestSnapshots(t *testing.T) {
 		w.runSel = 1
 		tt.Frame()
 		save(tt, "activity"+suffix)
+
+		// 场景与自动化
+		a := &fakeAuto{issues: map[string]automation.ShortcutIssue{"scene:focus": {Kind: "taken"}}}
+		w.auto = a
+		b.mu.Lock()
+		b.scenes = []engine.SceneView{{Scene: store.Scene{ID: "focus", Name: "专注", Icon: "lucide:target", Restore: true, ShowName: true, Shortcut: "ctrl+alt+1",
+			Steps: []store.SceneStep{{Switch: "awake.sh", Action: "on"}, {Switch: "flush.sh", Action: "run"}}}, Active: true}}
+		b.mu.Unlock()
+		a.rules = []store.Rule{
+			{ID: "r1", Enabled: true, Trigger: store.Trigger{Kind: "time", Value: "18:30", Days: []int{1, 2, 3, 4, 5}}, Action: store.RuleAction{Verb: "scene", Target: "focus"}, When: &store.Condition{From: "09:00", To: "19:00"}},
+			{ID: "r2", Enabled: true, Trigger: store.Trigger{Kind: "power", Event: "unplug"}, Action: store.RuleAction{Verb: "off", Target: "awake.sh"}, Suspended: "flapping"},
+			{ID: "r3", Trigger: store.Trigger{Kind: "app", Event: "launch", Value: "com.apple.Keynote", Label: "Keynote"}, Action: store.RuleAction{Verb: "on", Target: "awake.sh"}},
+		}
+		w.invalidate()
+		w.open(secScenes, "")
+		tt.Frame()
+		tt.Frame()
+		save(tt, "scene"+suffix)
+		w.open(secAutomations, "")
+		w.selRule = "r1"
+		tt.Frame()
+		tt.Frame()
+		save(tt, "rule"+suffix)
+		w.selRule = "r2"
+		tt.Frame()
+		save(tt, "rule-suspended"+suffix)
+
+		// 面板的场景栏
+		p := newPanel(b, Prefs{Accent: AccentOrange, Layout: "list", Density: "comfortable", ShowGroups: true, ShowScenes: true})
+		pt := ui.NewTester(p.view, 340, 420)
+		pt.SetDark(dark)
+		pt.Frame()
+		save(pt, "panel-scenes"+suffix)
 	}
 }
 

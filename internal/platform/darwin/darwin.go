@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -368,4 +369,59 @@ func NetworkFingerprint() (Fingerprint, error) {
 		}
 	}
 	return fp, nil
+}
+
+// ───────── 电源与应用 ─────────
+
+// PowerStatus 读取电源状态（`pmset -g batt`，约 5 毫秒；只在有电源规则时定期调用）。
+func PowerStatus() (Power, error) {
+	out, err := exec.Command("/usr/bin/pmset", "-g", "batt").Output()
+	if err != nil {
+		return Power{}, err
+	}
+	p, ok := ParsePmset(string(out))
+	if !ok {
+		return Power{}, errors.New("unrecognized pmset output")
+	}
+	return p, nil
+}
+
+var (
+	appKitOnce sync.Once
+	appKitErr  error
+)
+
+// RunningApps 返回正在运行、出现在 Dock 里的应用（NSWorkspace.runningApplications）。
+func RunningApps() ([]App, error) {
+	appKitOnce.Do(func() {
+		if err := loadFoundation(); err != nil {
+			appKitErr = err
+			return
+		}
+		_, appKitErr = purego.Dlopen(frameworks+"AppKit.framework/AppKit", rtld)
+	})
+	if appKitErr != nil {
+		return nil, appKitErr
+	}
+	// 自动释放池必须在创建它的线程上释放；goroutine 可能中途换线程，所以先固定住
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	pool := objc.ID(objc.GetClass("NSAutoreleasePool")).Send(objc.RegisterName("new"))
+	defer pool.Send(objc.RegisterName("drain"))
+	ws := objc.ID(objc.GetClass("NSWorkspace")).Send(objc.RegisterName("sharedWorkspace"))
+	apps := ws.Send(objc.RegisterName("runningApplications"))
+	n := objc.Send[uint](apps, objc.RegisterName("count"))
+	out := make([]App, 0, n)
+	for i := uint(0); i < n; i++ {
+		a := apps.Send(objc.RegisterName("objectAtIndex:"), i)
+		if objc.Send[int](a, objc.RegisterName("activationPolicy")) != 0 { // NSApplicationActivationPolicyRegular
+			continue
+		}
+		id := goString(a.Send(objc.RegisterName("bundleIdentifier")))
+		if id == "" {
+			continue
+		}
+		out = append(out, App{BundleID: id, Name: goString(a.Send(objc.RegisterName("localizedName")))})
+	}
+	return out, nil
 }

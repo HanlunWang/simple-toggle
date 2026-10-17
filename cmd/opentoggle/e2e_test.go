@@ -274,7 +274,7 @@ func TestMCP(t *testing.T) {
 	}
 	for _, want := range []string{"opentoggle_list", "opentoggle_set_switch", "opentoggle_set_params", "opentoggle_set_enabled",
 		"opentoggle_get_script", "opentoggle_write_script", "opentoggle_validate", "opentoggle_delete",
-		"opentoggle_run_action", "opentoggle_get_runs"} {
+		"opentoggle_run_action", "opentoggle_get_runs", "opentoggle_list_scenes", "opentoggle_activate_scene", "opentoggle_list_automations"} {
 		if !names[want] {
 			t.Errorf("missing tool %s", want)
 		}
@@ -290,6 +290,15 @@ func TestMCP(t *testing.T) {
 	}
 	if text, isErr := call("opentoggle_list", map[string]any{}); isErr || !strings.Contains(text, "lamp.sh") {
 		t.Fatalf("list: %s", text)
+	}
+	if text, isErr := call("opentoggle_list_scenes", map[string]any{}); isErr || strings.TrimSpace(text) != "[]" {
+		t.Fatalf("list_scenes: %s", text)
+	}
+	if text, isErr := call("opentoggle_activate_scene", map[string]any{"id": "ghost"}); !isErr || !strings.Contains(text, "no scene") {
+		t.Fatalf("activate missing scene: %s", text)
+	}
+	if text, isErr := call("opentoggle_list_automations", map[string]any{}); isErr || !strings.Contains(text, `"rules"`) {
+		t.Fatalf("list_automations: %s", text)
 	}
 	if text, isErr := call("opentoggle_set_switch", map[string]any{"id": "lamp", "on": true}); isErr || !strings.Contains(text, `"state": "on"`) {
 		t.Fatalf("set_switch: %s", text)

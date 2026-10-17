@@ -19,6 +19,7 @@ type fakeBackend struct {
 	params  map[string]string
 	scripts map[string]string // 工作台：脚本内容
 	runs    []store.Run
+	scenes  []engine.SceneView
 }
 
 func (f *fakeBackend) List() []engine.View {
@@ -92,7 +93,7 @@ func sampleViews() []engine.View {
 
 func newTestPanel(views []engine.View) (*panel, *fakeBackend) {
 	b := &fakeBackend{views: views}
-	p := newPanel(b, Prefs{Accent: AccentInk, Layout: "list", Density: "comfortable", ShowGroups: true})
+	p := newPanel(b, Prefs{Accent: AccentInk, Layout: "list", Density: "comfortable", ShowGroups: true, ShowScenes: true})
 	return p, b
 }
 

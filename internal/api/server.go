@@ -300,6 +300,10 @@ func (s *Server) v2(q *request) {
 		writeJSON(q.w, 200, map[string]any{"ok": true}, false)
 	case m == http.MethodGet && len(p) == 2 && p[1] == "events":
 		s.events(q)
+	case len(p) >= 2 && p[1] == "scenes":
+		s.scenes(q)
+	case len(p) >= 2 && p[1] == "automations":
+		s.automations(q)
 	case len(p) == 3 && p[1] == "switches":
 		s.switchResource(q, p[2], true)
 	case len(p) == 4 && p[1] == "switches":

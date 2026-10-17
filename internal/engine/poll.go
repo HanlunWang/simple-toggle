@@ -165,6 +165,9 @@ func (e *Engine) refresh() {
 		e.mu.Lock()
 		r := e.rts[id]
 		skip := r == nil || r.state == Pending || (r.state == Error && st == Off)
+		if !skip && (r.state == On && st == Off || r.state == Off && st == On) {
+			r.userAt = now // 不是 app 改的：用户在系统里直接改了（例如控制中心）
+		}
 		e.mu.Unlock()
 		if skip {
 			continue // daemon 的 error（意外退出）由监管协程标记，轮询不覆盖

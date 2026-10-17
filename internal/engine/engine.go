@@ -87,6 +87,7 @@ type rt struct {
 	op          sync.Mutex // 同一开关的操作串行执行
 	lastRun     *store.Run
 	busySince   time.Time // action 开始执行的时刻
+	userAt      time.Time // 用户最近一次改动它的时刻（自动化的冲突策略用）
 }
 
 // Engine 是开关管理器。所有方法并发安全。
@@ -108,6 +109,9 @@ type Engine struct {
 	wake   chan struct{}
 	stopCh chan struct{}
 	wg     sync.WaitGroup
+
+	sceneOp    sync.Mutex             // 场景串行执行
+	sceneState map[string]*sceneState // 激活中的场景（激活前状态与目标状态）
 }
 
 func New(cfg Config) *Engine {
@@ -130,6 +134,8 @@ func New(cfg Config) *Engine {
 		subs:     map[int]chan Event{},
 		wake:     make(chan struct{}, 1),
 		stopCh:   make(chan struct{}),
+
+		sceneState: map[string]*sceneState{},
 	}
 }
 
@@ -173,6 +179,39 @@ func (e *Engine) Shutdown() {
 	}
 	wg.Wait()
 	_ = os.Remove(e.cfg.LedgerPath)
+}
+
+// IsUser 报告来源是否代表用户的直接操作（自动化、恢复、场景内部的步骤不算）。
+func IsUser(src Source) bool {
+	switch src {
+	case Automation, Restore, Scene, Source("system"), Source("poll"):
+		return false
+	}
+	return true
+}
+
+func (e *Engine) markUser(r *rt, src Source) {
+	if !IsUser(src) {
+		return
+	}
+	e.mu.Lock()
+	r.userAt = time.Now()
+	e.mu.Unlock()
+}
+
+// UserChangedAt 返回用户最近一次改动这个开关的时刻：在 app 里操作，或在系统里直接改
+// （轮询发现状态变了）。自动化据此避免刚被用户手动改过的开关又被规则改回去。
+func (e *Engine) UserChangedAt(id string) time.Time {
+	id, ok := e.Resolve(id)
+	if !ok {
+		return time.Time{}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if r := e.rts[id]; r != nil {
+		return r.userAt
+	}
+	return time.Time{}
 }
 
 // waitOps 等待进行中的操作（on / off、按钮、改参数后的重跑）结束，最多等 limit：
@@ -416,6 +455,7 @@ func (e *Engine) SetSwitch(id string, on bool, src Source, detail string) (<-cha
 	if sw.Header.Type == contract.Action {
 		return nil, ErrNotToggle
 	}
+	e.markUser(r, src)
 	e.bump()
 	_ = e.cfg.Store.SetDesired(sw.ID, on)
 	done := make(chan struct{})
@@ -544,6 +584,7 @@ func (e *Engine) Run(id string, src Source, detail string) (<-chan store.Run, er
 	if !r.op.TryLock() {
 		return nil, ErrBusy
 	}
+	e.markUser(r, src)
 	e.mu.Lock()
 	r.busySince = time.Now()
 	e.mu.Unlock()

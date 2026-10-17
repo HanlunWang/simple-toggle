@@ -47,6 +47,8 @@ type state struct {
 	Seeded     map[string]bool              `json:"seeded"`
 	Meta       map[string]Meta              `json:"meta"`
 	Settings   map[string]string            `json:"settings"`
+	Scenes     []Scene                      `json:"scenes,omitempty"`
+	Rules      []Rule                       `json:"automations,omitempty"`
 	V1Imported bool                         `json:"v1Imported,omitempty"`
 }
 

@@ -17,9 +17,11 @@ import (
 // 设计稿：designs/opentoggle-v2/workbench.jsx。场景与自动化随 M4 加入侧栏。
 
 const (
-	secSwitches = "switches"
-	secActivity = "activity"
-	secLibrary  = "library"
+	secSwitches    = "switches"
+	secScenes      = "scenes"
+	secAutomations = "automations"
+	secActivity    = "activity"
+	secLibrary     = "library"
 
 	wbDetail = "workbench" // 工作台测试产生的运行记录的 detail，用来把输出放回输出面板
 )
@@ -73,6 +75,25 @@ type workbench struct {
 
 	closeAsk bool // 关闭窗口时有未保存的修改
 
+	// 场景、自动化与快捷键
+	auto          Automation
+	scenes        []engine.SceneView
+	rules         []store.Rule
+	selScene      string
+	selRule       string
+	sceneDraft    map[string]store.Scene
+	ruleDraft     map[string]store.Rule
+	recording     string            // 正在录制快捷键的那个输入
+	recorded      map[string]string // 录到的快捷键，下一次构建时交给对应的输入
+	recordErr     string
+	stepPick      string
+	sceneIcon     bool
+	ruleNote      map[string]string // 规则 id → 不完整的原因
+	pauseOpen     bool
+	installedApps func() []appInfo
+	pickPath      func(done func(path string))
+	network       func() (key, label string)
+
 	// 脚本库
 	libCat   string
 	libQuery string
@@ -105,6 +126,7 @@ func newWorkbench(b Backend, prefs Prefs) *workbench {
 		docs: map[string]*doc{}, fields: map[string]*fieldState{}, outputs: map[string][]outLine{},
 		savedAt: map[string]time.Time{}, busy: map[string]bool{},
 		inspector: true, bottomOpen: true, paramOpen: -1, runSel: 0,
+		recorded: map[string]string{}, sceneDraft: map[string]store.Scene{}, ruleDraft: map[string]store.Rule{}, ruleNote: map[string]string{},
 		actFilter: "all", libCat: "all",
 		onMain:             func(fn func()) { fn() },
 		openPath:           func(string) {},
@@ -123,6 +145,7 @@ func (w *workbench) handle(ev engine.Event) {
 		w.checkDisk()
 	case engine.EventRun:
 		w.runsDirty = true
+	case engine.EventScene:
 	}
 }
 
@@ -132,6 +155,10 @@ func (w *workbench) load() {
 	}
 	w.dirty = false
 	w.views = w.b.List()
+	w.scenes = w.b.Scenes()
+	if w.auto != nil {
+		w.rules = w.auto.Rules()
+	}
 	sort.SliceStable(w.views, func(i, j int) bool {
 		return strings.ToLower(w.views[i].Name) < strings.ToLower(w.views[j].Name)
 	})
@@ -196,6 +223,10 @@ func (w *workbench) render(c *ui.Context) {
 		ui.Column(c.Key("main")).Grow(1).MinWidth(0).FillHeight().Background(pal.BG).
 			BorderWidth(0, 0, 0, 1).BorderColor(pal.L2).Children(func() {
 			switch w.section {
+			case secScenes:
+				w.sceneEditor(c)
+			case secAutomations:
+				w.ruleEditor(c)
 			case secActivity:
 				w.activity(c)
 			case secLibrary:
@@ -247,13 +278,26 @@ func (w *workbench) sidebar(c *ui.Context) {
 	ui.Column(c.Key("nav")).FillWidth().Padding(0, 8, 8).Gap(1).Children(func() {
 		nav := []struct{ id, iconName, label string }{
 			{secSwitches, "toggle-right", tr("nav_switches")},
+			{secScenes, "layers", tr("nav_scenes")},
+			{secAutomations, "zap", tr("nav_automations")},
 			{secActivity, "activity", tr("nav_activity")},
 			{secLibrary, "book-open", tr("nav_library")},
 		}
 		for _, n := range nav {
 			count := ""
-			if n.id == secSwitches {
+			switch n.id {
+			case secSwitches:
 				count = itoa(len(w.views))
+			case secScenes:
+				count = itoa(len(w.scenes))
+			case secAutomations:
+				enabled := 0
+				for _, r := range w.rules {
+					if r.Enabled {
+						enabled++
+					}
+				}
+				count = itoa(enabled)
 			}
 			item := pal.navItem(c, "nav-"+n.id, n.iconName, n.label, w.section == n.id, false, func() {
 				if count != "" {
@@ -268,6 +312,10 @@ func (w *workbench) sidebar(c *ui.Context) {
 	ui.Box(c).FillWidth().Height(1).Margin(0, 14).Background(pal.L2)
 	ui.Scroll(c.Key("side-list")).FillWidth().Grow(1).Padding(2, 8, 8).Children(func() {
 		switch w.section {
+		case secScenes:
+			w.sceneList(c)
+		case secAutomations:
+			w.ruleList(c)
 		case secActivity:
 			w.activityFilters(c)
 		case secLibrary:
@@ -320,6 +368,15 @@ func (w *workbench) newMenu(c *ui.Context) {
 			w.newOpen = false
 			w.create(it.typ)
 		}
+	}
+	ui.Box(c).FillWidth().Height(1).Margin(4, 6).Background(w.pal.L2)
+	if w.pal.navItem(c, "new-scene", "layers", tr("new_scene"), false, false, nil).Label(tr("new") + " " + tr("new_scene")).Clicked() {
+		w.newOpen = false
+		w.newScene()
+	}
+	if w.auto != nil && w.pal.navItem(c, "new-rule", "zap", tr("new_rule"), false, false, nil).Label(tr("new")+" "+tr("new_rule")).Clicked() {
+		w.newOpen = false
+		w.newRule("")
 	}
 	ui.Box(c).FillWidth().Height(1).Margin(4, 6).Background(w.pal.L2)
 	if w.menuItem(c, "new-lib", "book-open", tr("new_from_library")) {
@@ -448,3 +505,5 @@ func (w *workbench) saveCurrent() {
 		w.save(d)
 	}
 }
+
+type appInfo struct{ ID, Name string }

@@ -107,6 +107,17 @@ func (w *workbench) inspectorView(c *ui.Context, d *doc, v *engine.View) {
 		w.paramsView(c, d)
 	})
 
+	if v != nil {
+		w.inspSection(c, "s-shortcut", tr("shortcut"), nil, func() { w.shortcutSection(c, *v) })
+		if w.auto != nil {
+			w.inspSection(c, "s-triggers", tr("sec_triggers"), func() {
+				if w.pal.iconBtn(c, "add-trigger", "plus", tr("add_trigger"), false).Clicked() {
+					w.newRule(v.ID)
+				}
+			}, func() { w.triggersSection(c, *v) })
+		}
+	}
+
 	w.inspSection(c, "s-menubar", tr("sec_menubar"), nil, func() { w.menubarView(c, d) })
 
 	if v != nil {
@@ -118,18 +129,25 @@ func (w *workbench) inspectorView(c *ui.Context, d *doc, v *engine.View) {
 // ───────── 图标 ─────────
 
 func (w *workbench) iconPicker(c *ui.Context, d *doc) {
+	w.iconButton(c, "icon-pick", d.header.Icon, &w.iconOpen, func(spec string) {
+		d.apply(contract.SetDirective(d.text(), "icon", spec))
+	})
+}
+
+// iconButton 是图标按钮加弹出的选择面板（Lucide 搜索 + emoji）。onPick 收到 lucide:<名称> 或 emoji。
+func (w *workbench) iconButton(c *ui.Context, key, current string, open *bool, onPick func(spec string)) {
 	pal := w.pal
-	btn := ui.Row(c.Key("icon-pick")).Size(34, 28).Shrink(0).Radius(7).Border(1, pal.L3).AlignItems(ui.Center).Justify(ui.Center).
+	btn := ui.Row(c.Key(key)).Size(34, 28).Shrink(0).Radius(7).Border(1, pal.L3).AlignItems(ui.Center).Justify(ui.Center).
 		Tooltip(tr("f_icon")).Label(tr("f_icon"))
-	if btn.Hovered() || w.iconOpen {
+	if btn.Hovered() || *open {
 		btn.Background(pal.L1)
 	}
-	btn.Children(func() { switchIcon(c, d.header.Icon, 15).TextColor(pal.T1) })
+	btn.Children(func() { switchIcon(c, current, 15).TextColor(pal.T1) })
 	if btn.Clicked() {
-		w.iconOpen = !w.iconOpen
+		*open = !*open
 		w.iconQuery, w.emoji = "", ""
 	}
-	ui.PopoverBase(c, btn, &w.iconOpen, func(panel ui.Element) {
+	ui.PopoverBase(c, btn, open, func(panel ui.Element) {
 		w.menuPanel(panel)
 		panel.Width(300).Padding(8).Gap(8)
 		panel.Children(func() {
@@ -143,16 +161,16 @@ func (w *workbench) iconPicker(c *ui.Context, d *doc) {
 					}
 					cell.Children(func() { icon(c, n, 15).TextColor(pal.T1) })
 					if cell.Clicked() {
-						d.apply(contract.SetDirective(d.text(), "icon", "lucide:"+n))
-						w.iconOpen = false
+						onPick("lucide:" + n)
+						*open = false
 					}
 				}
 			})
 			before := w.emoji
 			ui.TextInput(c.Key("emoji"), &w.emoji).FillWidth().Placeholder(tr("icon_emoji")).FontSize(13)
 			if w.emoji != before && strings.TrimSpace(w.emoji) != "" && !isASCII(w.emoji) {
-				d.apply(contract.SetDirective(d.text(), "icon", strings.TrimSpace(w.emoji)))
-				w.iconOpen = false
+				onPick(strings.TrimSpace(w.emoji))
+				*open = false
 			}
 		})
 	})

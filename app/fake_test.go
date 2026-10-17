@@ -2,8 +2,10 @@ package app
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
+	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/contract"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/runner"
@@ -123,4 +125,107 @@ func (f *fakeBackend) SetMeta(id string, m store.Meta) error {
 		}
 	}
 	return errors.New("no such switch")
+}
+
+// ───────── 场景 ─────────
+
+func (f *fakeBackend) Scenes() []engine.SceneView {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]engine.SceneView(nil), f.scenes...)
+}
+
+func (f *fakeBackend) SaveScene(sc store.Scene) (store.Scene, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if sc.ID == "" {
+		sc.ID = "scene-" + strconv.Itoa(len(f.scenes)+1)
+	}
+	f.calls = append(f.calls, "save-scene "+sc.ID+" "+sc.Name)
+	for i := range f.scenes {
+		if f.scenes[i].ID == sc.ID {
+			f.scenes[i].Scene = sc
+			return sc, nil
+		}
+	}
+	f.scenes = append(f.scenes, engine.SceneView{Scene: sc})
+	return sc, nil
+}
+
+func (f *fakeBackend) DeleteScene(id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "delete-scene "+id)
+	for i := range f.scenes {
+		if f.scenes[i].ID == id {
+			f.scenes = append(f.scenes[:i], f.scenes[i+1:]...)
+			return nil
+		}
+	}
+	return engine.ErrNoScene
+}
+
+func (f *fakeBackend) ToggleScene(id string, src engine.Source, detail string) (<-chan store.Run, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "toggle-scene "+id)
+	for i := range f.scenes {
+		if f.scenes[i].ID == id {
+			f.scenes[i].Active = !f.scenes[i].Active
+		}
+	}
+	ch := make(chan store.Run, 1)
+	ch <- store.Run{OK: true}
+	return ch, nil
+}
+
+func (f *fakeBackend) ActivateScene(id string, src engine.Source, detail string) (<-chan store.Run, error) {
+	return f.ToggleScene(id, src, detail)
+}
+
+// ───────── 自动化 ─────────
+
+type fakeAuto struct {
+	rules    []store.Rule
+	issues   map[string]automation.ShortcutIssue
+	paused   time.Time
+	isPaused bool
+	calls    []string
+}
+
+func (a *fakeAuto) Rules() []store.Rule { return append([]store.Rule(nil), a.rules...) }
+func (a *fakeAuto) SaveRule(r store.Rule) (store.Rule, error) {
+	if err := automation.Validate(r); err != nil {
+		return r, err
+	}
+	if r.ID == "" {
+		r.ID = "rule-" + strconv.Itoa(len(a.rules)+1)
+	}
+	a.calls = append(a.calls, "save-rule "+r.ID)
+	for i := range a.rules {
+		if a.rules[i].ID == r.ID {
+			a.rules[i] = r
+			return r, nil
+		}
+	}
+	a.rules = append(a.rules, r)
+	return r, nil
+}
+func (a *fakeAuto) DeleteRule(id string) error {
+	a.calls = append(a.calls, "delete-rule "+id)
+	for i := range a.rules {
+		if a.rules[i].ID == id {
+			a.rules = append(a.rules[:i], a.rules[i+1:]...)
+		}
+	}
+	return nil
+}
+func (a *fakeAuto) Test(id string) error            { a.calls = append(a.calls, "test "+id); return nil }
+func (a *fakeAuto) Paused() (bool, time.Time)       { return a.isPaused, a.paused }
+func (a *fakeAuto) Pause(until time.Time) error     { a.isPaused, a.paused = true, until; return nil }
+func (a *fakeAuto) Resume() error                   { a.isPaused = false; return nil }
+func (a *fakeAuto) CurrentNetwork() (string, error) { return "net-key", nil }
+func (a *fakeAuto) Reload()                         { a.calls = append(a.calls, "reload") }
+func (a *fakeAuto) ShortcutIssues() map[string]automation.ShortcutIssue {
+	return a.issues
 }

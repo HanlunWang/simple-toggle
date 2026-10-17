@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/HanlunWang/open-toggle/app"
 	"github.com/HanlunWang/open-toggle/internal/api"
+	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/cli"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/mcp"
@@ -119,9 +121,13 @@ func serve(args []string) error {
 		srv.Close()
 		return err
 	}
+	// 无界面模式也求值规则（时间、电源、应用、Wi-Fi）；快捷键与文件监听需要 app
+	auto := automation.New(automation.Config{Engine: eng, Store: st, Host: headlessHost{}})
+	auto.Start()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	<-ctx.Done()
+	auto.Stop()
 	eng.Shutdown()
 	srv.Close()
 	return nil
@@ -137,3 +143,13 @@ func isTerminal(f *os.File) bool {
 	fi, err := f.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
+
+// headlessHost 是无界面模式的 automation.Host：没有全局快捷键与文件监听。
+type headlessHost struct{}
+
+var errNeedsApp = errors.New("needs the OpenToggle app")
+
+func (headlessHost) RegisterShortcut(string, func()) error { return errNeedsApp }
+func (headlessHost) UnregisterShortcut(string)             {}
+func (headlessHost) Watch(string, func()) (func(), error)  { return nil, errNeedsApp }
+func (headlessHost) Notify(title, body string)             { log.Println(title+":", body) }

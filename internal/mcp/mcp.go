@@ -52,6 +52,11 @@ type getRunsArgs struct {
 	Limit      int    `json:"limit,omitempty" jsonschema:"Maximum number of runs to return (default 20)"`
 }
 
+type sceneArgs struct {
+	ID     string `json:"id" jsonschema:"Scene id or name"`
+	Action string `json:"action,omitempty" jsonschema:"activate, restore, or toggle (default: activate, or restore when already active)"`
+}
+
 type empty struct{}
 
 // Run 在 stdin / stdout 上运行 MCP 服务器，直到对端断开。
@@ -142,6 +147,29 @@ func NewServer() *sdk.Server {
 				q.Set("failed", "1")
 			}
 			return forward(req, "GET", "/v2/runs?"+q.Encode(), nil)
+		})
+	sdk.AddTool(s, &sdk.Tool{Name: "opentoggle_list_scenes",
+		Description: "List scenes (one-click groups of switches): id, name, steps (switch + on/off/run), whether it is active, and its shortcut."},
+		func(ctx context.Context, req *sdk.CallToolRequest, _ empty) (*sdk.CallToolResult, any, error) {
+			return forward(req, "GET", "/v2/scenes", nil)
+		})
+	sdk.AddTool(s, &sdk.Tool{Name: "opentoggle_activate_scene",
+		Description: "Activate a scene (runs its steps in order), or restore the switches to how they were before it was activated. Returns the result of each step."},
+		func(ctx context.Context, req *sdk.CallToolRequest, in sceneArgs) (*sdk.CallToolResult, any, error) {
+			action := in.Action
+			switch action {
+			case "":
+				action = "toggle"
+			case "activate", "restore", "toggle":
+			default:
+				return text("action must be activate, restore or toggle", true), nil, nil
+			}
+			return forward(req, "POST", "/v2/scenes/"+cli.PathEscape(in.ID)+"/"+action, nil)
+		})
+	sdk.AddTool(s, &sdk.Tool{Name: "opentoggle_list_automations",
+		Description: "List automation rules (trigger such as time, Wi-Fi, power, app, display, wake, file or shortcut → action on a switch or scene) and whether automations are paused. Read-only: the user edits rules in the app."},
+		func(ctx context.Context, req *sdk.CallToolRequest, _ empty) (*sdk.CallToolResult, any, error) {
+			return forward(req, "GET", "/v2/automations", nil)
 		})
 	return s
 }

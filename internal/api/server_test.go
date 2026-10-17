@@ -234,3 +234,31 @@ func TestDiscoveryFile(t *testing.T) {
 		t.Fatal("token not reused")
 	}
 }
+
+func TestScenesAPI(t *testing.T) {
+	e := newEnv(t)
+	st := e.s.opts.Store
+	st.PutScene(store.Scene{ID: "work", Name: "Work", Restore: true, Steps: []store.SceneStep{{Switch: "lamp.sh", Action: "on"}, {Switch: "摸鱼.sh", Action: "run"}}})
+	code, body := e.do("GET", "/v2/scenes", "", false, "")
+	if code != 200 || !strings.Contains(body, `"id": "work"`) || !strings.Contains(body, `"active": false`) {
+		t.Fatalf("list: %d %s", code, body)
+	}
+	if code, _ := e.do("POST", "/v2/scenes/work/activate", "", false, ""); code != 401 {
+		t.Fatalf("activate without a token: %d", code)
+	}
+	code, body = e.do("POST", "/v2/scenes/Work/toggle", "", true, "cli")
+	if code != 200 || !strings.Contains(body, `"ok": true`) || !strings.Contains(body, `"active": true`) || !strings.Contains(body, `"source": "cli"`) {
+		t.Fatalf("toggle: %d %s", code, body)
+	}
+	code, body = e.do("POST", "/v2/scenes/work/toggle", "", true, "")
+	if code != 200 || !strings.Contains(body, `"action": "restore"`) {
+		t.Fatalf("restore: %d %s", code, body)
+	}
+	if code, _ := e.do("POST", "/v2/scenes/ghost/activate", "", true, ""); code != 404 {
+		t.Fatalf("missing scene: %d", code)
+	}
+	st.PutRule(store.Rule{ID: "r1", Enabled: true, Trigger: store.Trigger{Kind: "wake", Event: "wake"}, Action: store.RuleAction{Verb: "on", Target: "lamp.sh"}})
+	if code, body := e.do("GET", "/v2/automations", "", false, ""); code != 200 || !strings.Contains(body, `"kind": "wake"`) {
+		t.Fatalf("automations: %d %s", code, body)
+	}
+}

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"time"
+
+	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/contract"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/runner"
@@ -31,6 +34,30 @@ type Backend interface {
 	Runs(f store.Filter) []store.Run
 	ClearRuns() error
 	SetMeta(id string, m store.Meta) error
+
+	// 场景
+	Scenes() []engine.SceneView
+	SaveScene(sc store.Scene) (store.Scene, error)
+	DeleteScene(id string) error
+	ToggleScene(id string, src engine.Source, detail string) (<-chan store.Run, error)
+	ActivateScene(id string, src engine.Source, detail string) (<-chan store.Run, error)
 }
 
-var _ Backend = (*engine.Engine)(nil)
+// Automation 是自动化规则与快捷键（*automation.Manager 实现它）。
+type Automation interface {
+	Rules() []store.Rule
+	SaveRule(r store.Rule) (store.Rule, error)
+	DeleteRule(id string) error
+	Test(id string) error
+	Paused() (bool, time.Time)
+	Pause(until time.Time) error
+	Resume() error
+	ShortcutIssues() map[string]automation.ShortcutIssue
+	CurrentNetwork() (string, error)
+	Reload()
+}
+
+var (
+	_ Backend    = (*engine.Engine)(nil)
+	_ Automation = (*automation.Manager)(nil)
+)

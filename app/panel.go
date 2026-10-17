@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
+	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/contract"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/keys"
@@ -22,9 +23,11 @@ type panel struct {
 	prefs Prefs
 	pal   palette
 
-	views    []engine.View
-	loadedAt time.Time
-	dirty    bool
+	views     []engine.View
+	scenes    []engine.SceneView
+	sceneBusy map[string]bool // 已点击、还没执行完的场景
+	loadedAt  time.Time
+	dirty     bool
 
 	query     string
 	searching bool
@@ -53,6 +56,7 @@ func newPanel(b Backend, prefs Prefs) *panel {
 		b: b, prefs: prefs, dirty: true,
 		collapsed: map[string]bool{}, pending: map[string]bool{}, edits: map[string]string{}, flash: map[string]time.Time{},
 		armed:     map[string]time.Time{},
+		sceneBusy: map[string]bool{},
 		axTrusted: func() bool { return true }, reduceTransparency: func() bool { return false },
 	}
 }
@@ -71,6 +75,7 @@ func (p *panel) load() {
 		return
 	}
 	p.views = p.b.List()
+	p.scenes = p.b.Scenes()
 	p.loadedAt = time.Now()
 	p.dirty = false
 	p.needsAX = false
@@ -137,6 +142,9 @@ func (p *panel) view(c *ui.Context) {
 			p.header(c)
 			if p.searching {
 				p.searchField(c)
+			}
+			if p.prefs.ShowScenes && len(p.scenes) > 0 && p.query == "" {
+				p.sceneBar(c)
 			}
 			if p.needsAX && !p.axTrusted() {
 				p.axBanner(c)
@@ -411,6 +419,9 @@ func (p *panel) subline(v engine.View) (text string, color ui.Color) {
 				return tr("done"), pal.Green
 			}
 			return fmt.Sprintf(tr("failed_exit"), v.LastRun.ExitCode), pal.Red
+		}
+		if v.LastRun.Time.IsZero() {
+			return "", color // 没有时间的记录（不应出现）：不显示「多少天前」
 		}
 		if !v.LastRun.OK {
 			return ago(v.LastRun.Time) + " · " + tr("failed"), pal.Red
@@ -871,21 +882,64 @@ func (p *panel) footer(c *ui.Context) {
 	})
 }
 
-// sceneChip 预留给 M4 的场景栏（glass 材质的胶囊按钮）。
-func (p *panel) sceneChip(c *ui.Context, key, label string, active bool) ui.Element {
+// sceneBar 是面板顶部的场景栏：glass 材质的胶囊，激活中的用强调色。
+func (p *panel) sceneBar(c *ui.Context) {
+	ui.ScrollHorizontal(c.Key("scenes")).FillWidth().Padding(2, 12, 10).Children(func() {
+		ui.Row(c).Gap(6).Children(func() {
+			for _, sv := range p.scenes {
+				sv := sv
+				chip := p.sceneChip(c, "scene-"+sv.ID, sv, sv.Active)
+				if chip.Clicked() && !p.sceneBusy[sv.ID] {
+					p.toggleScene(sv)
+				}
+			}
+		})
+	})
+}
+
+func (p *panel) toggleScene(sv engine.SceneView) {
+	ch, err := p.b.ToggleScene(sv.ID, engine.Manual, "")
+	if err != nil {
+		return
+	}
+	p.sceneBusy[sv.ID] = true
+	go func() {
+		<-ch
+		markFlashOnMain(func() {
+			delete(p.sceneBusy, sv.ID)
+			p.dirty = true
+		})
+	}()
+}
+
+func (p *panel) sceneChip(c *ui.Context, key string, sv engine.SceneView, active bool) ui.Element {
 	pal := p.pal
-	chip := ui.Row(c.Key(key)).Padding(5, 12).Radius(999).AlignItems(ui.Center)
+	tip := sv.Name
+	if sv.Shortcut != "" {
+		tip += "  " + automation.ShortcutSymbols(sv.Shortcut)
+	}
+	chip := ui.Row(c.Key(key)).Height(26).Padding(0, 11).Radius(999).Gap(6).AlignItems(ui.Center).Tooltip(tip).Label(sv.Name)
 	if active {
-		chip.Material(glass.Glass{Tint: pal.Accent, Interactive: true})
+		if pal.Ink {
+			chip.Material(glass.Glass{Tint: pal.FG, Interactive: true})
+		} else {
+			chip.Material(glass.Glass{Tint: pal.Accent, Interactive: true})
+		}
 	} else {
 		chip.Material(glass.Glass{Interactive: true})
+	}
+	if p.sceneBusy[sv.ID] {
+		chip.Opacity(0.6)
 	}
 	chip.Children(func() {
 		col := pal.T1
 		if active {
 			col = pal.OnAccent
 		}
-		ui.Text(c, label).FontSize(12).TextColor(col)
+		if sv.Icon != "" {
+			switchIcon(c, sv.Icon, 13).TextColor(col)
+		}
+		ui.Text(c, sv.Name).FontSize(12).FontWeight(500).TextColor(col).SingleLine()
 	})
 	return chip
 }

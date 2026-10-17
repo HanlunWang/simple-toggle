@@ -173,6 +173,19 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 			return e.fail("usage: opentoggle rm <id>")
 		}
 		return e.call("DELETE", "/v1/switches/"+PathEscape(rest[0]), nil)
+	case "scenes":
+		return e.scenes(jsonMode)
+	case "scene":
+		if len(rest) < 1 {
+			return e.fail("usage: opentoggle scene <id|name> [--restore]")
+		}
+		action := "toggle"
+		if flag("restore") {
+			action = "restore"
+		} else if flag("activate") {
+			action = "activate"
+		}
+		return e.scene(rest[0], action, jsonMode)
 	case "log":
 		return e.log(rest, jsonMode, args)
 	}
@@ -528,6 +541,9 @@ usage: opentoggle <command> [args] [--json]
   add <file.sh>            validate + install a new switch script
   put <id> <file.sh>       validate + replace an existing switch's script
   rm <id>                  delete a switch (moves script to Trash)
+  scenes                   list scenes (● = active)
+  scene <id|name>          activate a scene, or restore it when active;
+                           --activate / --restore to force one
   log [id] [--failed] [--limit N]
                            recent runs: source, duration, exit code
   validate <file.sh>       lint a script against the contract (offline)
@@ -540,4 +556,69 @@ usage: opentoggle <command> [args] [--json]
 
 <id> is the script file name (keep-awake.sh; the .sh suffix is optional).
 All commands except validate/press/mcp/help require the OpenToggle app running.`, version.Version)
+}
+
+func (e *Env) scenes(jsonMode bool) exit {
+	if jsonMode {
+		return e.call("GET", "/v2/scenes", nil)
+	}
+	var list []struct {
+		ID, Name string
+		Active   bool
+		Shortcut string
+		Steps    []struct{ Switch, Action string }
+	}
+	if code := e.get("/v2/scenes", &list); code != 0 {
+		return code
+	}
+	if len(list) == 0 {
+		fmt.Fprintln(e.Out, "no scenes (create one in the workbench)")
+	}
+	for _, sc := range list {
+		dot := "○"
+		if sc.Active {
+			dot = "●"
+		}
+		var steps []string
+		for _, st := range sc.Steps {
+			steps = append(steps, st.Switch+" "+st.Action)
+		}
+		fmt.Fprintf(e.Out, "%s %-16s %-14s %s\n", dot, sc.ID, sc.Name, strings.Join(steps, ", "))
+	}
+	return 0
+}
+
+func (e *Env) scene(id, action string, jsonMode bool) exit {
+	code, data, err := e.Client.Do("POST", "/v2/scenes/"+PathEscape(id)+"/"+action, nil)
+	if err != nil {
+		return e.fail("%v", err)
+	}
+	if code >= 400 {
+		e.Err.Write(data)
+		fmt.Fprintln(e.Err)
+		return 1
+	}
+	if jsonMode {
+		e.Out.Write(append(data, '\n'))
+		return 0
+	}
+	var res struct {
+		Run *struct {
+			OK     bool
+			Action string
+			Output string
+		}
+	}
+	_ = json.Unmarshal(data, &res)
+	if res.Run == nil {
+		fmt.Fprintln(e.Out, "still running (check `opentoggle log`)")
+		return 0
+	}
+	if out := strings.TrimRight(res.Run.Output, "\n"); out != "" {
+		fmt.Fprintln(e.Out, out)
+	}
+	if !res.Run.OK {
+		return e.fail("some steps failed")
+	}
+	return 0
 }

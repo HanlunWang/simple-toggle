@@ -7,6 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/HanlunWang/open-toggle/internal/api"
+	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/contract"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/paths"
@@ -78,6 +82,11 @@ func Run() error {
 	}
 
 	c := &controller{eng: eng, srv: srv, st: st, prefs: prefs, apiErr: apiErr, extras: map[string]*extraItem{}}
+	c.auto = automation.New(automation.Config{
+		Engine: eng, Store: st, Host: appHost{},
+		Describe:   func(r store.Rule) string { return ruleText(r, c.targetName) },
+		FlapNotice: func(r store.Rule) string { return fmt.Sprintf(tr("flap_notice"), ruleText(r, c.targetName)) },
+	})
 	mygo.App.WhenReady(c.ready)
 	mygo.App.OnSecondInstance(func([]string, string) { c.togglePanel() })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { c.shutdown() })
@@ -90,6 +99,7 @@ type extraItem struct {
 }
 
 type controller struct {
+	auto   *automation.Manager
 	eng    *engine.Engine
 	srv    *api.Server
 	st     *store.Store
@@ -105,6 +115,9 @@ type controller struct {
 	phase    bool
 
 	devPanel bool
+
+	appsOnce sync.Once
+	apps     []appInfo
 
 	wb           *workbench
 	wbWin        *mygo.Window
@@ -151,6 +164,8 @@ func (c *controller) ready() {
 		c.tray.SetToolTip("OpenToggle — " + fmt.Sprintf(tr("api_failed"), c.apiErr))
 	}
 
+	c.startAutomation()
+
 	events, cancel := c.eng.Subscribe()
 	go func() {
 		defer cancel()
@@ -168,6 +183,12 @@ func (c *controller) ready() {
 					c.panel.invalidate()
 					c.redrawPanel()
 					c.syncMenubar()
+					for _, e := range batch {
+						if e.Kind == engine.EventScene || e.Kind == engine.EventReloaded {
+							c.auto.Reload() // 场景的快捷键或开关列表变了
+							break
+						}
+					}
 					if c.wb != nil {
 						for _, e := range batch {
 							c.wb.handle(e)
@@ -350,6 +371,12 @@ func (c *controller) syncMenubar() {
 		}
 	}
 	c.trayKey = iconKey
+	for _, sv := range c.eng.Scenes() {
+		if sv.Active && sv.ShowName {
+			title = joinTitle(sv.Name, title) // 激活中的场景名显示在主图标旁
+			break
+		}
+	}
 	if title != c.titleKey {
 		c.tray.SetTitle(padTitle(title))
 		c.titleKey = title
@@ -479,6 +506,7 @@ func (c *controller) shutdown() {
 		if c.stop != nil {
 			close(c.stop)
 		}
+		c.auto.Stop()
 		c.eng.Shutdown()
 		c.srv.Close()
 		for _, x := range c.extras {
@@ -512,6 +540,20 @@ func (c *controller) openWorkbench(section, item string) {
 		c.wb.reveal = func(path string) { _ = exec.Command("/usr/bin/open", "-R", path).Start() }
 		c.wb.reduceTransparency = func() bool { return mygo.Theme.Preferences().ReduceTransparency }
 		c.wb.exportRuns = c.exportRuns
+		c.wb.auto = c.auto
+		c.wb.installedApps = c.installedApps
+		c.wb.network = currentNetwork
+		c.wb.pickPath = func(done func(string)) {
+			win := c.wbWin
+			go func() {
+				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: win, Directory: true, CreateDirectories: true})
+				c.wb.onMain(func() {
+					if err == nil && len(paths) > 0 {
+						done(paths[0])
+					}
+				})
+			}()
+		}
 		c.wb.closeWin = func() {
 			if c.wbWin != nil {
 				c.wbAllowClose = true
@@ -595,4 +637,78 @@ func (c *controller) exportRuns(runs []store.Run) {
 			}
 		})
 	}()
+}
+
+// ───────── 自动化 ─────────
+
+// startAutomation 启动规则求值，并把 mygo 才有的系统事件送进去。
+func (c *controller) startAutomation() {
+	c.auto.Start()
+	c.auto.Fire(automation.Event{Kind: "displays", Value: strconv.Itoa(len(mygo.Screen.Displays()))})
+	mygo.Screen.OnDisplaysChanged(func() {
+		c.auto.Fire(automation.Event{Kind: "displays", Value: strconv.Itoa(len(mygo.Screen.Displays()))})
+	})
+	mygo.Power.OnResume(func() { c.auto.Fire(automation.Event{Kind: automation.KindWake, Event: "wake"}) })
+	mygo.Power.OnUnlockScreen(func() { c.auto.Fire(automation.Event{Kind: automation.KindWake, Event: "unlock"}) })
+	mygo.Network.OnChanged(func(mygo.NetworkStatus) { c.auto.Fire(automation.Event{Kind: "network"}) })
+	if mygo.App.WasOpenedAtLogin() {
+		c.auto.Fire(automation.Event{Kind: automation.KindWake, Event: "login"})
+	}
+}
+
+// targetName 返回规则目标（开关或场景）的显示名。
+func (c *controller) targetName(verb, id string) string {
+	if verb == "scene" {
+		if sv, ok := c.eng.Scene(id); ok {
+			return sv.Name
+		}
+		return id + tr("rule_missing")
+	}
+	if v, ok := c.eng.Get(id); ok {
+		return v.Name
+	}
+	return id + tr("rule_missing")
+}
+
+// installedApps 返回已安装的应用（第一次调用时在后台读取，之后用缓存）。
+func (c *controller) installedApps() []appInfo {
+	c.appsOnce.Do(func() {
+		go func() {
+			list, err := mygo.Shell.InstalledApps()
+			if err != nil {
+				return
+			}
+			out := make([]appInfo, 0, len(list))
+			for _, a := range list {
+				out = append(out, appInfo{ID: a.ID, Name: a.Name})
+			}
+			slices.SortFunc(out, func(a, b appInfo) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
+			mygo.RunOnMain(func() {
+				c.apps = out
+				if c.wbWin != nil {
+					c.wbWin.Invalidate()
+				}
+			})
+		}()
+	})
+	return c.apps
+}
+
+// currentNetwork 返回当前网络的指纹与显示名（有定位授权时用 Wi-Fi 名称）。
+func currentNetwork() (string, string) {
+	fp, err := darwin.NetworkFingerprint()
+	if err != nil || fp.Gateway == "" {
+		return "", ""
+	}
+	label := ""
+	if _, ssid, err := darwin.WiFi(); err == nil && ssid != "" {
+		label = ssid
+	} else if fp.Domain != "" {
+		label = fp.Domain
+	} else if len(fp.DNSDomains) > 0 {
+		label = fp.DNSDomains[0]
+	} else {
+		label = fmt.Sprintf(tr("wifi_named"), fp.Gateway)
+	}
+	return fp.Key(), label
 }

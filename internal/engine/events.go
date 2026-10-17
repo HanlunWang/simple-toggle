@@ -13,6 +13,7 @@ const (
 	EventState    EventKind = "state"    // 开关状态、可见性或参数变化
 	EventRun      EventKind = "run"      // 一次执行结束，带运行记录
 	EventReloaded EventKind = "reloaded" // 脚本目录重新扫描
+	EventScene    EventKind = "scene"    // 场景增删改或激活状态变化（Switch 为场景 id）
 )
 
 // Event 是引擎发出的事件。View 在 EventState 时有值。

@@ -35,3 +35,5 @@ func WiFi() (string, string, error)            { return "", "", errUnsupported }
 func LocationStatus() (int, error)             { return -1, errUnsupported }
 func RequestLocation() error                   { return errUnsupported }
 func NetworkFingerprint() (Fingerprint, error) { return Fingerprint{}, errUnsupported }
+func PowerStatus() (Power, error)              { return Power{OnAC: true, Percent: 100}, errUnsupported }
+func RunningApps() ([]App, error)              { return nil, errUnsupported }

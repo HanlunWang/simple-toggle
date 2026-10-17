@@ -12,6 +12,7 @@ type Prefs struct {
 	MenubarStyle trayStyle
 	MenubarExtra string // none | count | countdown
 	ShowGroups   bool
+	ShowScenes   bool
 }
 
 func loadPrefs(st *store.Store) Prefs {
@@ -33,6 +34,7 @@ func loadPrefs(st *store.Store) Prefs {
 		MenubarStyle: trayStyle(get("menubarStyle", string(trayPill))),
 		MenubarExtra: get("menubarExtra", "countdown"),
 		ShowGroups:   get("showGroups", "true") == "true",
+		ShowScenes:   get("showScenes", "true") == "true",
 	}
 }
 

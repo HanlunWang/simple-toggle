@@ -139,3 +139,35 @@ func TestImportV1(t *testing.T) {
 		t.Fatal("imported twice")
 	}
 }
+
+func TestScenesAndRules(t *testing.T) {
+	dir := t.TempDir()
+	s, _ := Open(dir)
+	sc := Scene{ID: "focus", Name: "Focus", Steps: []SceneStep{{"a.sh", "on"}, {"b.sh", "run"}}, Restore: true}
+	if err := s.PutScene(sc); err != nil {
+		t.Fatal(err)
+	}
+	sc.Name = "Deep Focus"
+	s.PutScene(sc)
+	r := Rule{ID: "r1", Enabled: true, Trigger: Trigger{Kind: "time", Value: "18:30", Days: []int{1, 2}}, Action: RuleAction{Verb: "scene", Target: "focus"},
+		When: &Condition{Days: []int{1}, From: "09:00", To: "18:00"}}
+	s.PutRule(r)
+	// 返回的是副本：改它不影响存储
+	got := s.Rules()
+	got[0].Trigger.Days[0] = 6
+	got[0].When.Days[0] = 6
+	s.MarkFired("r1", time.Unix(100, 0))
+	s.Suspend("r1", "flapping")
+
+	s2, _ := Open(dir)
+	if scs := s2.Scenes(); len(scs) != 1 || scs[0].Name != "Deep Focus" || len(scs[0].Steps) != 2 {
+		t.Fatalf("scenes %+v", scs)
+	}
+	r2, ok := s2.Rule("r1")
+	if !ok || r2.Trigger.Days[0] != 1 || r2.When.Days[0] != 1 || r2.LastFired.Unix() != 100 || r2.Enabled || r2.Suspended != "flapping" {
+		t.Fatalf("rule %+v", r2)
+	}
+	if s2.DeleteScene("focus") != nil || s2.DeleteRule("r1") != nil || s2.DeleteRule("r1") != ErrNoSuchItem {
+		t.Fatal("delete")
+	}
+}
