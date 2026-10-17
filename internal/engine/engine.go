@@ -157,6 +157,7 @@ func (e *Engine) Shutdown() {
 		close(e.stopCh)
 	}
 	e.wg.Wait()
+	e.waitOps(5 * time.Second)
 	e.mu.Lock()
 	var procs []*runner.Proc
 	for _, r := range e.rts {
@@ -172,6 +173,27 @@ func (e *Engine) Shutdown() {
 	}
 	wg.Wait()
 	_ = os.Remove(e.cfg.LedgerPath)
+}
+
+// waitOps 等待进行中的操作（on / off、按钮、改参数后的重跑）结束，最多等 limit：
+// 否则它们会在退出之后继续写运行记录与状态。
+func (e *Engine) waitOps(limit time.Duration) {
+	e.mu.Lock()
+	rts := make([]*rt, 0, len(e.rts))
+	for _, r := range e.rts {
+		rts = append(rts, r)
+	}
+	e.mu.Unlock()
+	deadline := time.Now().Add(limit)
+	for _, r := range rts {
+		for !r.op.TryLock() {
+			if time.Now().After(deadline) {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		r.op.Unlock()
+	}
 }
 
 // ───────── 脚本目录 ─────────

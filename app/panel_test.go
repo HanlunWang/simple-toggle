@@ -13,10 +13,12 @@ import (
 )
 
 type fakeBackend struct {
-	mu     sync.Mutex
-	views  []engine.View
-	calls  []string
-	params map[string]string
+	mu      sync.Mutex
+	views   []engine.View
+	calls   []string
+	params  map[string]string
+	scripts map[string]string // 工作台：脚本内容
+	runs    []store.Run
 }
 
 func (f *fakeBackend) List() []engine.View {

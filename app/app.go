@@ -1,9 +1,11 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -104,6 +106,10 @@ type controller struct {
 
 	devPanel bool
 
+	wb           *workbench
+	wbWin        *mygo.Window
+	wbAllowClose bool
+
 	tickMu  sync.Mutex
 	ticking bool
 	stop    chan struct{}
@@ -114,6 +120,7 @@ func (c *controller) ready() {
 	c.stop = make(chan struct{})
 	c.panel = newPanel(c.eng, c.prefs)
 	c.panel.openScripts = func() { _ = mygo.Shell.OpenPath(c.eng.ScriptsDir()) }
+	c.panel.openWorkbench = func(id string) { c.openWorkbench(secSwitches, id) }
 	c.panel.quit = mygo.App.Quit
 	c.panel.axTrusted = darwin.AccessibilityTrusted
 	c.panel.reduceTransparency = func() bool { return mygo.Theme.Preferences().ReduceTransparency }
@@ -151,21 +158,36 @@ func (c *controller) ready() {
 			select {
 			case <-c.stop:
 				return
-			case _, ok := <-events:
+			case ev, ok := <-events:
 				if !ok {
 					return
 				}
 				// 合并一批事件后再刷新一次
-				drain(events)
+				batch := append([]engine.Event{ev}, drain(events)...)
 				mygo.RunOnMain(func() {
 					c.panel.invalidate()
 					c.redrawPanel()
 					c.syncMenubar()
+					if c.wb != nil {
+						for _, e := range batch {
+							c.wb.handle(e)
+						}
+						if c.wbWin != nil {
+							c.wbWin.Invalidate()
+						}
+					}
 				})
 			}
 		}
 	}()
 	c.syncMenubar()
+	// OPENTOGGLE_SHOW_WORKBENCH=1：启动后自动打开工作台（开发时截图用）
+	if os.Getenv("OPENTOGGLE_SHOW_WORKBENCH") == "1" {
+		go func() {
+			time.Sleep(1200 * time.Millisecond)
+			mygo.RunOnMain(func() { c.openWorkbench(os.Getenv("OPENTOGGLE_WB_SECTION"), os.Getenv("OPENTOGGLE_WB_ITEM")) })
+		}()
+	}
 	// OPENTOGGLE_SHOW_PANEL=1：启动后自动打开面板（开发时截图用，面板不随失焦关闭）
 	if os.Getenv("OPENTOGGLE_SHOW_PANEL") == "1" {
 		c.devPanel = true
@@ -176,15 +198,17 @@ func (c *controller) ready() {
 	}
 }
 
-func drain(ch <-chan engine.Event) {
+func drain(ch <-chan engine.Event) []engine.Event {
+	var out []engine.Event
 	for {
 		select {
-		case _, ok := <-ch:
+		case ev, ok := <-ch:
 			if !ok {
-				return
+				return out
 			}
+			out = append(out, ev)
 		default:
-			return
+			return out
 		}
 	}
 }
@@ -248,6 +272,7 @@ func (c *controller) contextMenu() {
 	}
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		{Label: tr("open_panel"), Click: func(*mygo.MenuItem, *mygo.Window) { c.togglePanel() }},
+		{Label: tr("open_workbench"), Click: func(*mygo.MenuItem, *mygo.Window) { c.openWorkbench("", "") }},
 		{Label: tr("open_scripts"), Click: func(*mygo.MenuItem, *mygo.Window) { _ = mygo.Shell.OpenPath(c.eng.ScriptsDir()) }},
 		{Label: tr("refresh"), Click: func(*mygo.MenuItem, *mygo.Window) { c.eng.Refresh() }},
 		mygo.Separator(),
@@ -463,4 +488,111 @@ func (c *controller) shutdown() {
 			c.tray.Destroy()
 		}
 	})
+}
+
+// ───────── 工作台窗口 ─────────
+
+// openWorkbench 打开（或切到）工作台。打开期间 app 显示在 Dock 里、有菜单栏，
+// 方便用 ⌘Tab 切换与使用编辑菜单；关闭后回到纯菜单栏 app。
+func (c *controller) openWorkbench(section, item string) {
+	if c.flyout != nil && !c.devPanel {
+		c.flyout.Close()
+	}
+	if c.wb == nil {
+		c.wb = newWorkbench(c.eng, c.prefs)
+		c.wb.onMain = func(fn func()) {
+			mygo.RunOnMain(func() {
+				fn()
+				if c.wbWin != nil {
+					c.wbWin.Invalidate()
+				}
+			})
+		}
+		c.wb.openPath = func(path string) { _ = exec.Command("/usr/bin/open", "-t", path).Start() }
+		c.wb.reveal = func(path string) { _ = exec.Command("/usr/bin/open", "-R", path).Start() }
+		c.wb.reduceTransparency = func() bool { return mygo.Theme.Preferences().ReduceTransparency }
+		c.wb.exportRuns = c.exportRuns
+		c.wb.closeWin = func() {
+			if c.wbWin != nil {
+				c.wbAllowClose = true
+				c.wbWin.Close()
+			}
+		}
+	}
+	c.wb.open(section, item)
+	c.wb.invalidate()
+	if c.wbWin != nil {
+		c.wbWin.Show()
+		c.wbWin.Focus()
+		mygo.App.Focus()
+		c.wbWin.Invalidate()
+		return
+	}
+	mygo.App.SetActivationPolicy(mygo.ActivationPolicyRegular)
+	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+		{Role: mygo.RoleAppMenu},
+		{Label: tr("menu_file"), Submenu: []*mygo.MenuItem{
+			{Label: tr("save"), Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) {
+				if c.wb != nil {
+					c.wb.saveCurrent()
+					if c.wbWin != nil {
+						c.wbWin.Invalidate()
+					}
+				}
+			}},
+			mygo.Separator(),
+			{Role: mygo.RoleClose},
+		}},
+		{Role: mygo.RoleEditMenu}, {Role: mygo.RoleWindowMenu},
+	}))
+	win := mygo.NewWindow(mygo.WindowOptions{
+		Title: "OpenToggle " + tr("workbench"), Width: 1180, Height: 760, MinWidth: 860, MinHeight: 560,
+		TitleBarStyle: mygo.TitleBarHidden, Vibrancy: mygo.VibrancySidebar, StateKey: "workbench",
+		Content: ui.View(c.wb.render),
+	})
+	c.wbWin, c.wbAllowClose = win, false
+	c.eng.PanelVisible(true) // 工作台打开时状态刷新得更勤
+	win.OnClose(func(e *mygo.CloseEvent) {
+		if !c.wbAllowClose && c.wb.unsaved() {
+			e.PreventDefault()
+			c.wb.closeAsk = true
+			win.Invalidate()
+		}
+	})
+	win.OnClosed(func() {
+		if c.wbWin == win {
+			c.wbWin = nil
+			c.eng.PanelVisible(false)
+			mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
+		}
+	})
+	mygo.App.Focus()
+}
+
+// exportRuns 让用户选择位置，把运行记录写成 JSON。对话框会阻塞，所以放在后台。
+func (c *controller) exportRuns(runs []store.Run) {
+	win := c.wbWin
+	go func() {
+		name := "opentoggle-runs-" + time.Now().Format("20060102-1504") + ".json"
+		home, _ := os.UserHomeDir()
+		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
+			Parent: win, DefaultPath: filepath.Join(home, "Downloads", name),
+			Filters: []mygo.FileFilter{{Name: "JSON", Extensions: []string{"json"}}},
+		})
+		if err == nil && path != "" {
+			var data []byte
+			data, err = json.MarshalIndent(runs, "", "  ")
+			if err == nil {
+				err = os.WriteFile(path, append(data, '\n'), 0o644)
+			}
+		}
+		c.wb.onMain(func() {
+			switch {
+			case err != nil:
+				c.wb.setNotice(fmt.Sprintf(tr("save_failed"), err), true)
+			case path != "":
+				c.wb.setNotice(fmt.Sprintf(tr("act_exported"), filepath.Base(path)), false)
+			}
+		})
+	}()
 }

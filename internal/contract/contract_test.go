@@ -1,8 +1,10 @@
 package contract
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -156,5 +158,63 @@ func TestSetDirective(t *testing.T) {
 	}
 	if f, l, ok := HeaderRange(src); !ok || f != 1 || l != 2 {
 		t.Errorf("header range %d %d %v", f, l, ok)
+	}
+}
+
+func TestLintLinesAndCodes(t *testing.T) {
+	src := "#!/bin/bash\n# <switch.name> X\n# <switch.icon> sf:not.a.symbol\n# <switch.type> bogus\n# <switch.param> key=a type=number min=5 max=1\necho hi\n"
+	got := map[string]int{}
+	for _, i := range Lint(src) {
+		got[i.Code] = i.Line
+		if i.Message != fmt.Sprintf(Messages[i.Code], i.Args...) {
+			t.Errorf("%s: message %q does not match its format", i.Code, i.Message)
+		}
+	}
+	want := map[string]int{"icon_sf_unmapped": 3, "invalid_type": 4, "param_min_gt_max": 5}
+	for code, line := range want {
+		if got[code] != line {
+			t.Errorf("%s: line %d, want %d (all: %v)", code, got[code], line, got)
+		}
+	}
+	action := "#!/bin/bash\n# <switch.name> A\n# <switch.type> action\ncase \"$1\" in\n  on) ;;\nesac\n"
+	for _, i := range Lint(action) {
+		if i.Code == "action_case_arg" && i.Line != 4 {
+			t.Errorf("action_case_arg on line %d, want 4", i.Line)
+		}
+	}
+}
+
+func TestSetParamsRoundTrip(t *testing.T) {
+	src, err := os.ReadFile("../presets/switches/keep-awake.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, _ := Parse(string(src))
+	out := SetParams(string(src), h.Params)
+	h2, _ := Parse(out)
+	if !reflect.DeepEqual(h.Params, h2.Params) {
+		t.Fatalf("params changed:\n%#v\n%#v", h.Params, h2.Params)
+	}
+	if strings.Count(out, "<switch.param>") != len(h.Params) || len(Lint(out)) != len(Lint(string(src))) {
+		t.Fatalf("rewrite changed the script:\n%s", out)
+	}
+	// 新增一个带空格的参数，再全部删掉
+	added := append(h.Params, Param{Key: "note", Label: "备注 文本", Type: ParamText, Hint: `say "hi"`})
+	h3, _ := Parse(SetParams(out, added))
+	if len(h3.Params) != 3 || h3.Params[2].Label != "备注 文本" || h3.Params[2].Hint != "say hi" {
+		t.Fatalf("added param: %#v", h3.Params)
+	}
+	none := SetParams(out, nil)
+	if strings.Contains(none, "<switch.param>") || !strings.Contains(none, "<switch.menubar>") {
+		t.Fatalf("remove all params:\n%s", none)
+	}
+	// 没有任何参数的脚本：插在最后一条指令之后
+	plain := "#!/bin/bash\n# <switch.name> A\n# <switch.type> action\necho hi\n"
+	got := SetParams(plain, []Param{{Key: "x", Type: ParamNumber}})
+	if want := "# <switch.type> action\n# <switch.param> key=x type=number\necho hi"; !strings.Contains(got, want) {
+		t.Fatalf("insert position:\n%s", got)
+	}
+	if mb := FormatMenuBar(MenuBar{Mode: MenuBarReplace, Icon: "lucide:coffee", Countdown: true}); parseMenuBar(mb).Mode != MenuBarReplace {
+		t.Fatalf("menubar %q", mb)
 	}
 }

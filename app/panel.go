@@ -33,23 +33,26 @@ type panel struct {
 	pending   map[string]bool      // 刚发出的 on / off 的目标值，状态回来前用它显示开关
 	edits     map[string]string    // 参数输入框的编辑中内容
 	flash     map[string]time.Time // action 完成后短暂显示结果
+	armed     map[string]time.Time // 「运行前确认」：第一次点击后等待确认的截止时间
 
 	needsAX            bool
 	axTrusted          func() bool
 	reduceTransparency func() bool // 系统「降低透明度」：面板改为实色
 
 	// 外部动作（测试里可留空）
-	openScripts func()
-	requestAX   func()
-	quit        func()
-	resize      func(height float32)
-	lastHeight  float32
+	openScripts   func()
+	openWorkbench func(id string)
+	requestAX     func()
+	quit          func()
+	resize        func(height float32)
+	lastHeight    float32
 }
 
 func newPanel(b Backend, prefs Prefs) *panel {
 	return &panel{
 		b: b, prefs: prefs, dirty: true,
 		collapsed: map[string]bool{}, pending: map[string]bool{}, edits: map[string]string{}, flash: map[string]time.Time{},
+		armed:     map[string]time.Time{},
 		axTrusted: func() bool { return true }, reduceTransparency: func() bool { return false },
 	}
 }
@@ -165,6 +168,13 @@ func (p *panel) view(c *ui.Context) {
 		if v.State == engine.Running || v.State == engine.Pending {
 			c.After(100 * time.Millisecond)
 			break
+		}
+	}
+	for id, t := range p.armed {
+		if d := time.Until(t); d > 0 {
+			c.After(d)
+		} else {
+			delete(p.armed, id)
 		}
 	}
 	for id, t := range p.flash {
@@ -536,6 +546,9 @@ func (p *panel) control(c *ui.Context, v engine.View) {
 		case p.flashing(v) && v.LastRun != nil:
 			btn.Border(1, alpha(pal.Red, 0.4))
 			btn.Children(func() { icon(c, "x", 13).TextColor(pal.Red); ui.Text(c, tr("failed")).FontSize(12).TextColor(pal.Red) })
+		case p.isArmed(v.ID):
+			btn.Border(1, alpha(pal.Amber, 0.5)).Background(alpha(pal.Amber, 0.10))
+			btn.Children(func() { ui.Text(c, tr("confirm_short")).FontSize(12).FontWeight(500).TextColor(pal.Amber) })
 		default:
 			if btn.Hovered() {
 				btn.Background(pal.L1)
@@ -548,7 +561,7 @@ func (p *panel) control(c *ui.Context, v engine.View) {
 			})
 		}
 		if btn.Clicked() && v.State != engine.Running {
-			p.run(v)
+			p.press(v)
 		}
 		return
 	}
@@ -566,6 +579,21 @@ func (p *panel) setSwitch(v engine.View, on bool) {
 		delete(p.pending, v.ID)
 	}
 	p.dirty = true
+}
+
+// press 是点击按钮型开关：设置了「运行前确认」时第一次点击只进入确认状态（3 秒内再点才运行）。
+func (p *panel) press(v engine.View) {
+	if v.Meta.Confirm && !p.isArmed(v.ID) {
+		p.armed[v.ID] = time.Now().Add(3 * time.Second)
+		return
+	}
+	delete(p.armed, v.ID)
+	p.run(v)
+}
+
+func (p *panel) isArmed(id string) bool {
+	t, ok := p.armed[id]
+	return ok && time.Now().Before(t)
 }
 
 func (p *panel) run(v engine.View) {
@@ -806,7 +834,7 @@ func (p *panel) tile(c *ui.Context, v engine.View) {
 	if t.Clicked() {
 		if v.Type == contract.Action {
 			if v.State != engine.Running {
-				p.run(v)
+				p.press(v)
 			}
 		} else {
 			p.setSwitch(v, !on)
@@ -819,18 +847,21 @@ func (p *panel) tile(c *ui.Context, v engine.View) {
 func (p *panel) footer(c *ui.Context) {
 	pal := p.pal
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(2).Padding(6, 8).Children(func() {
-		open := ui.Row(c.Key("open-scripts")).Height(26).Padding(0, 8).Radius(7).Gap(6).AlignItems(ui.Center).Label(tr("open_scripts"))
-		if open.Hovered() {
-			open.Background(pal.L2)
+		wb := ui.Row(c.Key("open-workbench")).Height(26).Padding(0, 8).Radius(7).Gap(6).AlignItems(ui.Center).Label(tr("workbench"))
+		if wb.Hovered() {
+			wb.Background(pal.L2)
 		}
-		open.Children(func() {
-			icon(c, "folder", 14).TextColor(pal.T2)
-			ui.Text(c, tr("open_scripts")).FontSize(12.5).TextColor(pal.T2)
+		wb.Children(func() {
+			icon(c, "square-terminal", 14).TextColor(pal.T2)
+			ui.Text(c, tr("workbench")).FontSize(12.5).TextColor(pal.T2)
 		})
-		if open.Clicked() && p.openScripts != nil {
-			p.openScripts()
+		if wb.Clicked() && p.openWorkbench != nil {
+			p.openWorkbench("")
 		}
 		ui.Spacer(c)
+		if p.iconButton(c, "btn-folder", "folder", tr("open_scripts"), false).Clicked() && p.openScripts != nil {
+			p.openScripts()
+		}
 		if p.iconButton(c, "btn-refresh", "rotate-cw", tr("refresh"), false).Clicked() {
 			p.b.Refresh()
 		}
