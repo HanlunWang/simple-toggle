@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 场景：侧栏列表与编辑页。修改立即保存（名称为空时暂不保存）。

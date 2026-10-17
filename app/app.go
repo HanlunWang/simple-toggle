@@ -16,15 +16,15 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/api"
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/paths"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/presets"
-	"github.com/HanlunWang/open-toggle/internal/store"
-	"github.com/HanlunWang/open-toggle/internal/version"
+	"github.com/HanlunWang/simple-toggle/internal/api"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/paths"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/presets"
+	"github.com/HanlunWang/simple-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/version"
 )
 
 // Run 启动菜单栏 app，直到用户退出。
@@ -40,8 +40,14 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	// OPENTOGGLE_NO_V1_IMPORT=1：开发与验收时的隔离实例不读 v1 的期望状态（否则会按它去开关真实系统）
-	if os.Getenv("OPENTOGGLE_NO_V1_IMPORT") == "1" {
+	// 更名前（OpenToggle）的脚本目录：第一次启动时复制过来
+	if n, err := paths.MigrateLegacyScripts(); err != nil {
+		log.Println("migrate scripts:", err)
+	} else if n > 0 {
+		log.Printf("copied %d scripts from %s", n, paths.LegacyConfig())
+	}
+	// SIMPLETOGGLE_NO_V1_IMPORT=1：开发与验收时的隔离实例不读 v1 的期望状态（否则会按它去开关真实系统）
+	if os.Getenv("SIMPLETOGGLE_NO_V1_IMPORT") == "1" {
 		// 跳过
 	} else if v, err := store.ReadV1(store.V1Domain); err == nil {
 		if _, err := st.ImportV1(v); err != nil {
@@ -64,7 +70,7 @@ func Run() error {
 		exe = resolved
 	}
 	scriptsDir := paths.Scripts()
-	if dir := st.Setting(keyScriptsDir); dir != "" && os.Getenv("OPENTOGGLE_HOME") == "" {
+	if dir := st.Setting(keyScriptsDir); dir != "" && os.Getenv("SIMPLETOGGLE_HOME") == "" {
 		scriptsDir = dir
 	}
 	timeout, shell := engineDefaults(st)
@@ -78,7 +84,7 @@ func Run() error {
 		log.Println("seed:", err)
 	}
 	srv := api.New(eng, api.Options{Port: paths.Port(), DiscoveryPath: paths.Discovery(), Version: version.Version, Store: st})
-	// API 先于状态恢复启动：恢复拉起的 daemon 可能立刻调用 `opentoggle press`
+	// API 先于状态恢复启动：恢复拉起的 daemon 可能立刻调用 `simpletoggle press`
 	var apiErr error
 	apiOn := st.Setting(keyAPI) != "false"
 	if apiOn {
@@ -176,7 +182,7 @@ func (c *controller) ready() {
 
 	var err error
 	c.tray, err = mygo.NewTray(mygo.TrayOptions{
-		ID: "main", Icon: trayIconPNG(c.prefs.MenubarStyle, 0, false), IconIsTemplate: true, ToolTip: "OpenToggle",
+		ID: "main", Icon: trayIconPNG(c.prefs.MenubarStyle, 0, false), IconIsTemplate: true, ToolTip: "SimpleToggle",
 	})
 	if err != nil {
 		log.Println("tray:", err)
@@ -185,7 +191,7 @@ func (c *controller) ready() {
 	c.tray.OnClick(c.togglePanel)
 	c.tray.OnRightClick(c.contextMenu)
 	if c.apiErr != nil {
-		c.tray.SetToolTip("OpenToggle — " + fmt.Sprintf(tr("api_failed"), c.apiErr))
+		c.tray.SetToolTip("SimpleToggle — " + fmt.Sprintf(tr("api_failed"), c.apiErr))
 	}
 
 	c.startAutomation()
@@ -197,14 +203,14 @@ func (c *controller) ready() {
 		c.titleKey = "-"
 		c.syncMenubar()
 	})
-	// 第一次启动显示引导（OPENTOGGLE_SKIP_ONBOARDING=1 跳过，OPENTOGGLE_SHOW_ONBOARDING=1 强制显示）
-	if (c.st.Setting(keyOnboarded) != "true" && os.Getenv("OPENTOGGLE_SKIP_ONBOARDING") != "1") || os.Getenv("OPENTOGGLE_SHOW_ONBOARDING") == "1" {
+	// 第一次启动显示引导（SIMPLETOGGLE_SKIP_ONBOARDING=1 跳过，SIMPLETOGGLE_SHOW_ONBOARDING=1 强制显示）
+	if (c.st.Setting(keyOnboarded) != "true" && os.Getenv("SIMPLETOGGLE_SKIP_ONBOARDING") != "1") || os.Getenv("SIMPLETOGGLE_SHOW_ONBOARDING") == "1" {
 		go func() {
 			time.Sleep(800 * time.Millisecond)
 			mygo.RunOnMain(c.openOnboarding)
 		}()
 	}
-	if tab := os.Getenv("OPENTOGGLE_SHOW_SETTINGS"); tab != "" {
+	if tab := os.Getenv("SIMPLETOGGLE_SHOW_SETTINGS"); tab != "" {
 		go func() {
 			time.Sleep(1200 * time.Millisecond)
 			mygo.RunOnMain(func() { c.openSettings(tab) })
@@ -258,15 +264,15 @@ func (c *controller) ready() {
 		}
 	}()
 	c.syncMenubar()
-	// OPENTOGGLE_SHOW_WORKBENCH=1：启动后自动打开工作台（开发时截图用）
-	if os.Getenv("OPENTOGGLE_SHOW_WORKBENCH") == "1" {
+	// SIMPLETOGGLE_SHOW_WORKBENCH=1：启动后自动打开工作台（开发时截图用）
+	if os.Getenv("SIMPLETOGGLE_SHOW_WORKBENCH") == "1" {
 		go func() {
 			time.Sleep(1200 * time.Millisecond)
-			mygo.RunOnMain(func() { c.openWorkbench(os.Getenv("OPENTOGGLE_WB_SECTION"), os.Getenv("OPENTOGGLE_WB_ITEM")) })
+			mygo.RunOnMain(func() { c.openWorkbench(os.Getenv("SIMPLETOGGLE_WB_SECTION"), os.Getenv("SIMPLETOGGLE_WB_ITEM")) })
 		}()
 	}
-	// OPENTOGGLE_SHOW_PANEL=1：启动后自动打开面板（开发时截图用，面板不随失焦关闭）
-	if os.Getenv("OPENTOGGLE_SHOW_PANEL") == "1" {
+	// SIMPLETOGGLE_SHOW_PANEL=1：启动后自动打开面板（开发时截图用，面板不随失焦关闭）
+	if os.Getenv("SIMPLETOGGLE_SHOW_PANEL") == "1" {
 		c.devPanel = true
 		go func() {
 			time.Sleep(1500 * time.Millisecond)
@@ -451,7 +457,7 @@ func (c *controller) syncMenubar() {
 		kind, val := contract.ResolveIcon(v.MenuBar.Icon)
 		x := c.extras[id]
 		if x == nil {
-			opts := mygo.TrayOptions{ID: "extra-" + id, IconIsTemplate: true, ToolTip: v.Name + " — OpenToggle"}
+			opts := mygo.TrayOptions{ID: "extra-" + id, IconIsTemplate: true, ToolTip: v.Name + " — SimpleToggle"}
 			if kind == contract.IconLucide {
 				opts.Icon = templatePNG(val, 32)
 			} else {
@@ -633,7 +639,7 @@ func (c *controller) openWorkbench(section, item string) {
 	}
 	c.windowOpened()
 	win := mygo.NewWindow(mygo.WindowOptions{
-		Title: "OpenToggle " + tr("workbench"), Width: 1180, Height: 760, MinWidth: 860, MinHeight: 560,
+		Title: "SimpleToggle " + tr("workbench"), Width: 1180, Height: 760, MinWidth: 860, MinHeight: 560,
 		TitleBarStyle: mygo.TitleBarHidden, Vibrancy: mygo.VibrancySidebar, StateKey: "workbench",
 		Content: ui.View(c.wb.render),
 	})
@@ -660,7 +666,7 @@ func (c *controller) openWorkbench(section, item string) {
 func (c *controller) exportRuns(runs []store.Run) {
 	win := c.wbWin
 	go func() {
-		name := "opentoggle-runs-" + time.Now().Format("20060102-1504") + ".json"
+		name := "simpletoggle-runs-" + time.Now().Format("20060102-1504") + ".json"
 		home, _ := os.UserHomeDir()
 		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
 			Parent: win, DefaultPath: filepath.Join(home, "Downloads", name),

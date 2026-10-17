@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/runner"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/runner"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // fakeBackend 的工作台部分：脚本保存在内存里，解析后同步到 views。

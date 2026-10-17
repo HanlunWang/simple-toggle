@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 const awakeScript = `#!/bin/bash

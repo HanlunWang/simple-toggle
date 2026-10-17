@@ -1,4 +1,4 @@
-module github.com/HanlunWang/open-toggle
+module github.com/HanlunWang/simple-toggle
 
 go 1.27.2
 

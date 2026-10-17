@@ -6,7 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 活动：全部运行记录（来源、耗时、退出码、输出），按结果和来源筛选，可以导出和清空。

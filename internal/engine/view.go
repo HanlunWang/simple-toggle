@@ -3,8 +3,8 @@ package engine
 import (
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // ParamView 是一个参数及其当前值。

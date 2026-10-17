@@ -3,7 +3,7 @@ package engine
 import (
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // EventKind 是事件类型。

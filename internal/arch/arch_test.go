@@ -8,7 +8,7 @@ import (
 )
 
 func TestInternalDoesNotImportMygo(t *testing.T) {
-	out, err := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", "github.com/HanlunWang/open-toggle/internal/...").Output()
+	out, err := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", "github.com/HanlunWang/simple-toggle/internal/...").Output()
 	if err != nil {
 		t.Fatal(err)
 	}

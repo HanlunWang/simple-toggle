@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 type fixture struct {
@@ -59,7 +59,7 @@ func (f *fixture) toggle(name string) string {
 # <switch.name> %s
 # <switch.param> key=level type=number default=1
 case "$1" in
-  on) echo "$SWITCH_LEVEL $OPENTOGGLE_TRIGGER" > %q ;;
+  on) echo "$SWITCH_LEVEL $SIMPLETOGGLE_TRIGGER" > %q ;;
   off) rm -f %q ;;
   status) [ -f %q ] && echo on || echo off ;;
 esac
@@ -194,7 +194,7 @@ func TestDaemonLifecycle(t *testing.T) {
 
 func TestAction(t *testing.T) {
 	f := newFixture(t)
-	f.write("flush.sh", "#!/bin/sh\n# <switch.name> Flush\n# <switch.type> action\nsleep 0.3\necho \"flushed $OPENTOGGLE_TRIGGER\"\n")
+	f.write("flush.sh", "#!/bin/sh\n# <switch.name> Flush\n# <switch.type> action\nsleep 0.3\necho \"flushed $SIMPLETOGGLE_TRIGGER\"\n")
 	f.write("fail.sh", "#!/bin/sh\n# <switch.name> Fail\n# <switch.type> action\nexit 4\n")
 	f.e.Start()
 	defer f.e.Shutdown()

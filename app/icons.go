@@ -15,7 +15,7 @@ import (
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
 )
 
 // lucide.json.gz 是 lucide-static 0.469.0 的全部图标（名称 → 精简 SVG），ISC 许可，见 icons/LUCIDE_LICENSE。

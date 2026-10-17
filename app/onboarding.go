@@ -10,11 +10,11 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/integrations"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/integrations"
 )
 
-// 首次启动引导：五步，每一步都可以跳过（designs/opentoggle-v2/onboarding.jsx）。
+// 首次启动引导：五步，每一步都可以跳过（designs/simpletoggle-v2/onboarding.jsx）。
 
 //go:embed icons/appicon.png
 var appIconPNG []byte

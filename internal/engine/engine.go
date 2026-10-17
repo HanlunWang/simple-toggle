@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/runner"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/runner"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // State 是开关的运行状态。
@@ -62,7 +62,7 @@ func (e *LintError) Error() string { return "script has contract errors" }
 type Config struct {
 	ScriptsDir     string
 	LedgerPath     string // daemons.json
-	Bin            string // 注入脚本的 OPENTOGGLE_BIN
+	Bin            string // 注入脚本的 SIMPLETOGGLE_BIN
 	Store          *store.Store
 	Trash          func(path string) error
 	Shell          string        // 无 shebang 脚本用的 shell
@@ -419,7 +419,9 @@ func (e *Engine) paramValue(sw *Switch, p contract.Param) string {
 func (e *Engine) env(sw *Switch, src Source) []string {
 	env := os.Environ()
 	env = withHomebrewPath(env)
-	env = append(env, "OPENTOGGLE_BIN="+e.cfg.Bin, "OPENTOGGLE_TRIGGER="+string(src))
+	env = append(env, "SIMPLETOGGLE_BIN="+e.cfg.Bin, "SIMPLETOGGLE_TRIGGER="+string(src),
+		// 更名前（OpenToggle）的变量名：已有的脚本照常可用
+		"OPENTOGGLE_BIN="+e.cfg.Bin, "OPENTOGGLE_TRIGGER="+string(src))
 	if e.cfg.ExtraEnv != nil {
 		env = append(env, e.cfg.ExtraEnv()...)
 	}

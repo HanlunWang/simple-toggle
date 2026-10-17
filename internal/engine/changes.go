@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 待确认变更：AI 提交的脚本先存起来，用户在 app 里看过差异后批准才写入文件。

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# OpenToggle 2 发布：测试 → mygo build（通用二进制、Developer ID 签名、公证、装订、
+# SimpleToggle 2 发布：测试 → mygo build（通用二进制、Developer ID 签名、公证、装订、
 # 自动更新文件）→ 验收产物 → 输出 cask 需要的 sha256。
 #
 #   ./Scripts/release.sh            只在本地构建与验收（不上传任何东西）
@@ -39,7 +39,7 @@ if [ "$UPLOAD" = 1 ]; then
   git rev-parse "v${VERSION}" >/dev/null 2>&1 && fail "标签 v${VERSION} 已存在"
 fi
 
-echo "==> OpenToggle ${VERSION}"
+echo "==> SimpleToggle ${VERSION}"
 echo "==> Tests"
 go vet ./...
 go test -count=1 ./...
@@ -51,14 +51,14 @@ ARGS=(build -platform darwin/universal)
 go tool mygo "${ARGS[@]}"
 
 # ---- 验收 ----
-APP="$(find build -maxdepth 3 -name 'OpenToggle.app' -type d | head -1)"
+APP="$(find build -maxdepth 3 -name 'SimpleToggle.app' -type d | head -1)"
 DMG="$(find build -maxdepth 2 -name '*.dmg' | head -1)"
 [ -n "$APP" ] && [ -n "$DMG" ] || fail "没有找到构建出的 app 或 dmg（build/）"
 echo "==> Verify $APP"
-[ -f "$APP/Contents/Resources/skills/opentoggle/SKILL.md" ] || fail "skill 没有打进 app"
-BIN="$APP/Contents/MacOS/OpenToggle"
+[ -f "$APP/Contents/Resources/skills/simpletoggle/SKILL.md" ] || fail "skill 没有打进 app"
+BIN="$APP/Contents/MacOS/SimpleToggle"
 lipo -archs "$BIN" | grep -q arm64 && lipo -archs "$BIN" | grep -q x86_64 || fail "不是通用二进制：$(lipo -archs "$BIN")"
-[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = "io.github.hanlunwang.OpenToggle" ] || fail "bundle id 不对"
+[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = "io.github.hanlunwang.SimpleToggle" ] || fail "bundle id 不对"
 codesign --verify --deep --strict "$APP"
 spctl -a -vv --type execute "$APP" 2>&1 | grep -q "Notarized Developer ID" || fail "Gatekeeper 没有认出公证"
 xcrun stapler validate "$DMG" >/dev/null || fail "dmg 没有装订公证票据"
@@ -68,10 +68,10 @@ find build -name "update-darwin-universal.json" | grep -q . || fail "没有生�
 SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 cat <<DONE
 
-✓ OpenToggle ${VERSION}
+✓ SimpleToggle ${VERSION}
   dmg:     ${DMG}
   sha256:  ${SHA}
-  (把 version 与 sha256 填进 Packaging/opentoggle.rb，再复制到 tap 仓库的 Casks/opentoggle.rb)
+  (把 version 与 sha256 填进 Packaging/simpletoggle.rb，再复制到 tap 仓库的 Casks/simpletoggle.rb)
 
 DONE
 if [ "$UPLOAD" = 1 ]; then

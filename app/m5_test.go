@@ -7,10 +7,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/integrations"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/integrations"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 type fakeSettings struct {
@@ -64,8 +64,8 @@ func newFakeSettings(views []engine.View) (*settingsHost, *fakeSettings) {
 			return integrations.Plan{Client: client, File: "/tmp/mcp.json", After: `{"mcpServers": {}}`}, nil
 		},
 		apply:        func(p integrations.Plan) error { f.applied = append(f.applied, "apply "+p.Client); return nil },
-		snippet:      integrations.Snippet("/bin/opentoggle"),
-		cliPath:      func() string { return "/opt/homebrew/bin/opentoggle" },
+		snippet:      integrations.Snippet("/bin/simpletoggle"),
+		cliPath:      func() string { return "/opt/homebrew/bin/simpletoggle" },
 		skill:        func() (bool, string) { return false, "" },
 		axTrusted:    func() bool { return false },
 		requestAX:    func() { f.applied = append(f.applied, "ax") },

@@ -3,9 +3,9 @@ package api
 import (
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // ───────── /v1：与 v1（Swift 版）返回结构一致，字段按字母序 ─────────

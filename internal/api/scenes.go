@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // /v2/scenes 与 /v2/automations。场景可以列出并激活、恢复；自动化规则只读（修改走 app）。

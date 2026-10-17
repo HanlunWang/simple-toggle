@@ -17,13 +17,13 @@ import (
 	_ "github.com/egoist/mygo/locales/zh-Hans" // mygo 自带文案（搜索框、编辑器菜单等）的简体中文
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/integrations"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/store"
-	"github.com/HanlunWang/open-toggle/internal/version"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/integrations"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/version"
 )
 
 // 设置、首次引导、深链接、通知与全局快捷键（M5）。
@@ -269,7 +269,7 @@ func (c *controller) notifyChange(id string) {
 		verb = tr("chg_verb_create")
 	}
 	n := mygo.NewNotification(mygo.NotificationOptions{
-		Title: "OpenToggle",
+		Title: "SimpleToggle",
 		Body:  fmt.Sprintf(tr("chg_notify"), clientLabel(ch), verb, ch.Name),
 	})
 	n.OnClick(func() {
@@ -320,8 +320,8 @@ func (c *controller) openInEditor(path string) {
 
 // ───────── AI 集成 ─────────
 
-// integrationEnv 是一键接入用的环境。PATH 上的 opentoggle 指向这个 app 时写它的路径
-// （例如 Homebrew 的 /opt/homebrew/bin/opentoggle，升级后不变），否则写 app 里的二进制。
+// integrationEnv 是一键接入用的环境。PATH 上的 simpletoggle 指向这个 app 时写它的路径
+// （例如 Homebrew 的 /opt/homebrew/bin/simpletoggle，升级后不变），否则写 app 里的二进制。
 func (c *controller) integrationEnv() integrations.Env {
 	bin := c.exe
 	if p := cliOnPath(); p != "" {
@@ -332,23 +332,23 @@ func (c *controller) integrationEnv() integrations.Env {
 	return integrations.Default(bin)
 }
 
-// skillSource 是随 app 发布的 skill 目录（mygo.json 的 resources 打进 Contents/Resources/skills；OPENTOGGLE_SKILL_DIR 可覆盖）。
+// skillSource 是随 app 发布的 skill 目录（mygo.json 的 resources 打进 Contents/Resources/skills；SIMPLETOGGLE_SKILL_DIR 可覆盖）。
 func (c *controller) skillSource() string {
-	if d := os.Getenv("OPENTOGGLE_SKILL_DIR"); d != "" {
+	if d := os.Getenv("SIMPLETOGGLE_SKILL_DIR"); d != "" {
 		return d
 	}
 	if dir, err := mygo.App.Path(mygo.PathResources); err == nil {
-		return filepath.Join(dir, "skills", "opentoggle")
+		return filepath.Join(dir, "skills", "simpletoggle")
 	}
-	return filepath.Join(filepath.Dir(c.exe), "..", "Resources", "skills", "opentoggle")
+	return filepath.Join(filepath.Dir(c.exe), "..", "Resources", "skills", "simpletoggle")
 }
 
 func cliOnPath() string {
-	if p, err := exec.LookPath("opentoggle"); err == nil {
+	if p, err := exec.LookPath("simpletoggle"); err == nil {
 		return p
 	}
 	for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin", filepath.Join(homeDir(), ".local", "bin")} {
-		p := filepath.Join(dir, "opentoggle")
+		p := filepath.Join(dir, "simpletoggle")
 		if _, err := os.Stat(p); err == nil {
 			return p
 		}
@@ -368,7 +368,7 @@ func (c *controller) exportConfig(win *mygo.Window, done func(string, error)) {
 	}
 	go func() {
 		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
-			Parent: win, DefaultPath: filepath.Join(homeDir(), "Downloads", "opentoggle-config-"+time.Now().Format("20060102")+".json"),
+			Parent: win, DefaultPath: filepath.Join(homeDir(), "Downloads", "simpletoggle-config-"+time.Now().Format("20060102")+".json"),
 			Filters: []mygo.FileFilter{{Name: "JSON", Extensions: []string{"json"}}},
 		})
 		if err == nil && path != "" {
@@ -395,7 +395,7 @@ func (c *controller) importConfig(win *mygo.Window, done func(int, int, int, err
 		}
 		var x store.Export
 		if err := json.Unmarshal(data, &x); err != nil || x.Format != store.ExportFormat {
-			done(0, 0, 0, errors.New("not an OpenToggle settings file"))
+			done(0, 0, 0, errors.New("not a SimpleToggle settings file"))
 			return
 		}
 		scripts := 0
@@ -570,7 +570,7 @@ func (c *controller) openSettings(tab string) {
 	}
 	c.windowOpened()
 	win := mygo.NewWindow(mygo.WindowOptions{
-		Title: "OpenToggle " + tr("settings"), Width: 780, Height: 600, MinWidth: 680, MinHeight: 480,
+		Title: "SimpleToggle " + tr("settings"), Width: 780, Height: 600, MinWidth: 680, MinHeight: 480,
 		TitleBarStyle: mygo.TitleBarHidden, Vibrancy: mygo.VibrancySidebar, StateKey: "settings",
 		Content: ui.View(c.st_.render),
 	})
@@ -623,7 +623,7 @@ func (c *controller) openOnboarding() {
 	})
 	c.windowOpened()
 	win = mygo.NewWindow(mygo.WindowOptions{
-		Title: "OpenToggle", Width: 840, Height: 580, DisableResize: true,
+		Title: "SimpleToggle", Width: 840, Height: 580, DisableResize: true,
 		TitleBarStyle: mygo.TitleBarHidden, Content: ui.View(ob.render),
 	})
 	c.obWin = win

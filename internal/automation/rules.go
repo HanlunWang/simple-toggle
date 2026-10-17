@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 触发器种类。

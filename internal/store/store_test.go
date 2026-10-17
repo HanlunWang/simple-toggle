@@ -90,19 +90,19 @@ const v1Plist = `<?xml version="1.0" encoding="UTF-8"?>
 	<string>-1269 207 1000 640</string>
 	<key>NSBlob</key>
 	<data>AAEC</data>
-	<key>OpenToggle.desiredStates</key>
+	<key>SimpleToggle.desiredStates</key>
 	<dict>
 		<key>dock-autohide.sh</key>
 		<integer>1</integer>
 		<key>keep-awake.sh</key>
 		<false/>
 	</dict>
-	<key>OpenToggle.disabledSwitches</key>
+	<key>SimpleToggle.disabledSwitches</key>
 	<array>
 		<string>wifi.sh</string>
 		<string>摸鱼模式.sh</string>
 	</array>
-	<key>OpenToggle.paramValues</key>
+	<key>SimpleToggle.paramValues</key>
 	<dict>
 		<key>keep-awake.sh</key>
 		<dict>
@@ -112,9 +112,9 @@ const v1Plist = `<?xml version="1.0" encoding="UTF-8"?>
 			<string>dis</string>
 		</dict>
 	</dict>
-	<key>OpenToggle.seededScripts</key>
+	<key>SimpleToggle.seededScripts</key>
 	<array><string>keep-awake.sh</string></array>
-	<key>OpenToggle.language</key>
+	<key>SimpleToggle.language</key>
 	<string>zh-Hans</string>
 </dict>
 </plist>`

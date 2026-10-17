@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/keys"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/keys"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 type env struct {
@@ -40,7 +40,7 @@ func newEnv(t *testing.T) *env {
 # <switch.param> key=mode type=select label=Mode default=a options="A=a|B=b"
 case "$1" in on) touch `+mark+` ;; off) rm -f `+mark+` ;; status) [ -f `+mark+` ] && echo on || echo off ;; esac
 `), 0o755)
-	os.WriteFile(filepath.Join(dir, "摸鱼.sh"), []byte("#!/bin/sh\n# <switch.name> 摸鱼\n# <switch.type> action\necho \"fish $OPENTOGGLE_TRIGGER\"\n"), 0o755)
+	os.WriteFile(filepath.Join(dir, "摸鱼.sh"), []byte("#!/bin/sh\n# <switch.name> 摸鱼\n# <switch.type> action\necho \"fish $SIMPLETOGGLE_TRIGGER\"\n"), 0o755)
 	st, _ := store.Open(filepath.Join(root, "data"))
 	eng := engine.New(engine.Config{ScriptsDir: dir, LedgerPath: filepath.Join(root, "daemons.json"), Store: st,
 		PollHidden: time.Hour, PollVisible: time.Hour})

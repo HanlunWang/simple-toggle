@@ -1,6 +1,6 @@
 package main
 
-// M1 验收：真实构建 opentoggle，在隔离的目录与端口上运行无界面引擎，
+// M1 验收：真实构建 simpletoggle，在隔离的目录与端口上运行无界面引擎，
 // 用 skill 文档里的每条命令与 MCP 客户端驱动它。不碰用户的脚本、偏好设置与正在运行的 app。
 
 import (
@@ -22,11 +22,11 @@ import (
 var bin string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "opentoggle-e2e-bin")
+	dir, err := os.MkdirTemp("", "simpletoggle-e2e-bin")
 	if err != nil {
 		panic(err)
 	}
-	bin = filepath.Join(dir, "opentoggle")
+	bin = filepath.Join(dir, "simpletoggle")
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
@@ -59,13 +59,13 @@ func start(t *testing.T) *instance {
 	os.MkdirAll(filepath.Join(in.home, "switches"), 0o755)
 	os.MkdirAll(in.scratch, 0o755)
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "OPENTOGGLE_") || strings.HasPrefix(kv, "CLAUDECODE=") {
+		if strings.HasPrefix(kv, "SIMPLETOGGLE_") || strings.HasPrefix(kv, "CLAUDECODE=") {
 			continue // 测试自己控制调用方身份
 		}
 		in.env = append(in.env, kv)
 	}
-	in.env = append(in.env, "OPENTOGGLE_HOME="+in.home, "OPENTOGGLE_DATA="+filepath.Join(root, "data"),
-		"OPENTOGGLE_PORT="+strconv.Itoa(freePort(t)))
+	in.env = append(in.env, "SIMPLETOGGLE_HOME="+in.home, "SIMPLETOGGLE_DATA="+filepath.Join(root, "data"),
+		"SIMPLETOGGLE_PORT="+strconv.Itoa(freePort(t)))
 
 	mark := filepath.Join(in.scratch, "lamp.on")
 	in.writeScript("lamp.sh", fmt.Sprintf(`#!/bin/sh
@@ -134,7 +134,7 @@ func (in *instance) must(args ...string) string {
 	in.t.Helper()
 	out, errOut, code := in.run(args...)
 	if code != 0 {
-		in.t.Fatalf("opentoggle %s: exit %d\n%s%s", strings.Join(args, " "), code, out, errOut)
+		in.t.Fatalf("simpletoggle %s: exit %d\n%s%s", strings.Join(args, " "), code, out, errOut)
 	}
 	return out
 }
@@ -223,7 +223,7 @@ func TestSkillCommands(t *testing.T) {
 	}
 
 	// 运行记录：带上 agent 身份的 CLI 调用记为 AI 来源
-	in.env = append(in.env, "OPENTOGGLE_AGENT=TestAgent")
+	in.env = append(in.env, "SIMPLETOGGLE_AGENT=TestAgent")
 	in.must("run", "flush")
 	var runs []map[string]any
 	json.Unmarshal([]byte(in.must("log", "flush", "--json")), &runs)
@@ -236,8 +236,8 @@ func TestWritesNeedToken(t *testing.T) {
 	in := start(t)
 	var port int
 	for _, kv := range in.env {
-		if strings.HasPrefix(kv, "OPENTOGGLE_PORT=") {
-			port, _ = strconv.Atoi(strings.TrimPrefix(kv, "OPENTOGGLE_PORT="))
+		if strings.HasPrefix(kv, "SIMPLETOGGLE_PORT=") {
+			port, _ = strconv.Atoi(strings.TrimPrefix(kv, "SIMPLETOGGLE_PORT="))
 		}
 	}
 	out, _ := exec.Command("/usr/bin/curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-X", "POST",
@@ -272,9 +272,9 @@ func TestMCP(t *testing.T) {
 	for _, tool := range tools.Tools {
 		names[tool.Name] = true
 	}
-	for _, want := range []string{"opentoggle_list", "opentoggle_set_switch", "opentoggle_set_params", "opentoggle_set_enabled",
-		"opentoggle_get_script", "opentoggle_write_script", "opentoggle_validate", "opentoggle_delete",
-		"opentoggle_run_action", "opentoggle_get_runs", "opentoggle_list_scenes", "opentoggle_activate_scene", "opentoggle_list_automations", "opentoggle_change_status"} {
+	for _, want := range []string{"simpletoggle_list", "simpletoggle_set_switch", "simpletoggle_set_params", "simpletoggle_set_enabled",
+		"simpletoggle_get_script", "simpletoggle_write_script", "simpletoggle_validate", "simpletoggle_delete",
+		"simpletoggle_run_action", "simpletoggle_get_runs", "simpletoggle_list_scenes", "simpletoggle_activate_scene", "simpletoggle_list_automations", "simpletoggle_change_status"} {
 		if !names[want] {
 			t.Errorf("missing tool %s", want)
 		}
@@ -288,54 +288,54 @@ func TestMCP(t *testing.T) {
 		}
 		return res.Content[0].(*sdk.TextContent).Text, res.IsError
 	}
-	if text, isErr := call("opentoggle_list", map[string]any{}); isErr || !strings.Contains(text, "lamp.sh") {
+	if text, isErr := call("simpletoggle_list", map[string]any{}); isErr || !strings.Contains(text, "lamp.sh") {
 		t.Fatalf("list: %s", text)
 	}
-	if text, isErr := call("opentoggle_list_scenes", map[string]any{}); isErr || strings.TrimSpace(text) != "[]" {
+	if text, isErr := call("simpletoggle_list_scenes", map[string]any{}); isErr || strings.TrimSpace(text) != "[]" {
 		t.Fatalf("list_scenes: %s", text)
 	}
-	if text, isErr := call("opentoggle_activate_scene", map[string]any{"id": "ghost"}); !isErr || !strings.Contains(text, "no scene") {
+	if text, isErr := call("simpletoggle_activate_scene", map[string]any{"id": "ghost"}); !isErr || !strings.Contains(text, "no scene") {
 		t.Fatalf("activate missing scene: %s", text)
 	}
-	if text, isErr := call("opentoggle_list_automations", map[string]any{}); isErr || !strings.Contains(text, `"rules"`) {
+	if text, isErr := call("simpletoggle_list_automations", map[string]any{}); isErr || !strings.Contains(text, `"rules"`) {
 		t.Fatalf("list_automations: %s", text)
 	}
-	if text, isErr := call("opentoggle_set_switch", map[string]any{"id": "lamp", "on": true}); isErr || !strings.Contains(text, `"state": "on"`) {
+	if text, isErr := call("simpletoggle_set_switch", map[string]any{"id": "lamp", "on": true}); isErr || !strings.Contains(text, `"state": "on"`) {
 		t.Fatalf("set_switch: %s", text)
 	}
-	if text, isErr := call("opentoggle_set_params", map[string]any{"id": "lamp", "params": map[string]any{"mode": "b"}}); isErr || !strings.Contains(text, `"value": "b"`) {
+	if text, isErr := call("simpletoggle_set_params", map[string]any{"id": "lamp", "params": map[string]any{"mode": "b"}}); isErr || !strings.Contains(text, `"value": "b"`) {
 		t.Fatalf("set_params: %s", text)
 	}
-	if text, isErr := call("opentoggle_run_action", map[string]any{"id": "flush"}); isErr || !strings.Contains(text, "flushed") {
+	if text, isErr := call("simpletoggle_run_action", map[string]any{"id": "flush"}); isErr || !strings.Contains(text, "flushed") {
 		t.Fatalf("run_action: %s", text)
 	}
-	if text, isErr := call("opentoggle_validate", map[string]any{"content": "#!/bin/sh\necho hi\n"}); isErr || !strings.Contains(text, `"valid": false`) {
+	if text, isErr := call("simpletoggle_validate", map[string]any{"content": "#!/bin/sh\necho hi\n"}); isErr || !strings.Contains(text, `"valid": false`) {
 		t.Fatalf("validate: %s", text)
 	}
-	if text, isErr := call("opentoggle_write_script", map[string]any{"content": "#!/bin/sh\necho no header\n"}); !isErr || !strings.Contains(text, "Missing required directive") {
+	if text, isErr := call("simpletoggle_write_script", map[string]any{"content": "#!/bin/sh\necho no header\n"}); !isErr || !strings.Contains(text, "Missing required directive") {
 		t.Fatalf("write_script with errors: %v %s", isErr, text)
 	}
 	// AI 写脚本：先存成待确认变更，不写文件
-	text, isErr := call("opentoggle_write_script", map[string]any{"content": "#!/bin/sh\n# <switch.name> From AI\n# <switch.type> action\necho hi\n"})
+	text, isErr := call("simpletoggle_write_script", map[string]any{"content": "#!/bin/sh\n# <switch.name> From AI\n# <switch.type> action\necho hi\n"})
 	if isErr || !strings.Contains(text, `"pending": true`) || !strings.Contains(text, "waiting for the user's approval") {
 		t.Fatalf("write_script should wait for approval: %v %s", isErr, text)
 	}
 	if _, err := os.Stat(filepath.Join(in.home, "switches", "from-ai.sh")); err == nil {
 		t.Fatal("AI script written before approval")
 	}
-	if text, isErr := call("opentoggle_change_status", map[string]any{"id": "chg-1"}); isErr || !strings.Contains(text, `"status": "pending"`) {
+	if text, isErr := call("simpletoggle_change_status", map[string]any{"id": "chg-1"}); isErr || !strings.Contains(text, `"status": "pending"`) {
 		t.Fatalf("change_status: %s", text)
 	}
 	// 删除脚本默认不允许 AI 执行
-	if text, isErr := call("opentoggle_delete", map[string]any{"id": "lamp"}); !isErr || !strings.Contains(text, "do not allow AI agents to delete scripts") {
+	if text, isErr := call("simpletoggle_delete", map[string]any{"id": "lamp"}); !isErr || !strings.Contains(text, "do not allow AI agents to delete scripts") {
 		t.Fatalf("delete should be refused: %s", text)
 	}
-	text, _ = call("opentoggle_get_runs", map[string]any{"limit": 5})
+	text, _ = call("simpletoggle_get_runs", map[string]any{"limit": 5})
 	var runs []map[string]any
 	if json.Unmarshal([]byte(text), &runs) != nil || len(runs) == 0 || runs[0]["source"] != "ai" || runs[0]["detail"] != "e2e-client" {
 		t.Fatalf("MCP provenance: %s", text)
 	}
-	if text, isErr := call("opentoggle_get_script", map[string]any{"id": "ghost"}); !isErr || !strings.Contains(text, "no switch") {
+	if text, isErr := call("simpletoggle_get_script", map[string]any{"id": "ghost"}); !isErr || !strings.Contains(text, "no switch") {
 		t.Fatalf("missing switch: %s", text)
 	}
 }

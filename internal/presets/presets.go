@@ -5,7 +5,7 @@ package presets
 import (
 	"embed"
 
-	"github.com/HanlunWang/open-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
 )
 
 //go:embed switches/*.sh library/*.sh

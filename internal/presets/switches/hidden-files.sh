@@ -3,7 +3,7 @@
 # <switch.icon> lucide:eye
 # <switch.type> toggle
 #
-# Toggle contract: OpenToggle invokes `<script> on | off | status`.
+# Toggle contract: SimpleToggle invokes `<script> on | off | status`.
 # `status` must print "on" or "off" to stdout; a non-zero exit code
 # marks the switch state as unknown.
 case "$1" in

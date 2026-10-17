@@ -7,7 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 待确认的修改：AI 提交的脚本先停在这里，用户看过差异后确认写入或拒绝。

@@ -1,4 +1,4 @@
-// Package integrations 把 OpenToggle 的 MCP 服务器接入常见的 AI 客户端（Claude Code、
+// Package integrations 把 SimpleToggle 的 MCP 服务器接入常见的 AI 客户端（Claude Code、
 // Cursor、Codex），并安装 agent skill。修改配置文件前先备份成 .bak；界面在执行前
 // 展示将要写入的内容（Plan），用户确认后才 Apply。
 package integrations
@@ -27,14 +27,14 @@ const (
 var Clients = []string{ClaudeCode, Cursor, Codex}
 
 // ServerName 是写进各客户端配置的 MCP 服务器名称。
-const ServerName = "opentoggle"
+const ServerName = "simpletoggle"
 
 var ErrNoCLI = errors.New("the claude command was not found")
 
 // Env 是检测与修改时用到的环境（测试里替换）。
 type Env struct {
 	Home string
-	Bin  string // opentoggle 二进制的绝对路径
+	Bin  string // simpletoggle 二进制的绝对路径
 	// LookPath 查找命令；默认在 PATH 之外也查 Homebrew 与 ~/.local/bin 等常见位置。
 	LookPath func(name string) (string, error)
 	// Run 执行命令并返回合并输出。
@@ -86,7 +86,7 @@ func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 type Status struct {
 	Client    string
 	Present   bool   // 客户端装了
-	Connected bool   // 配置里已有 opentoggle
+	Connected bool   // 配置里已有 simpletoggle
 	Command   string // 配置里的命令
 	Current   bool   // 配置指向当前的二进制
 	File      string // 涉及的配置文件
@@ -301,7 +301,7 @@ func isCodexHeader(line string) bool {
 	return t == "[mcp_servers."+ServerName+"]" || strings.HasPrefix(t, "[mcp_servers."+ServerName+".")
 }
 
-// codexSection 返回 [mcp_servers.opentoggle] 一节（含子表）的文本。
+// codexSection 返回 [mcp_servers.simpletoggle] 一节（含子表）的文本。
 func codexSection(toml string) string {
 	var b strings.Builder
 	in := false
@@ -317,7 +317,7 @@ func codexSection(toml string) string {
 	return b.String()
 }
 
-// removeCodexSection 删掉 [mcp_servers.opentoggle] 一节（含子表），其余原样保留。
+// removeCodexSection 删掉 [mcp_servers.simpletoggle] 一节（含子表），其余原样保留。
 func removeCodexSection(toml string) string {
 	var out []string
 	in := false
@@ -356,7 +356,7 @@ func (e Env) SkillStatus() (installed bool, target string) {
 	return exists(filepath.Join(p, "SKILL.md")), p
 }
 
-// InstallSkill 把 skill 链接到 ~/.claude/skills/opentoggle。原来是一个普通目录时先改名为 .bak。
+// InstallSkill 把 skill 链接到 ~/.claude/skills/simpletoggle。原来是一个普通目录时先改名为 .bak。
 func (e Env) InstallSkill(src string) error {
 	if !exists(filepath.Join(src, "SKILL.md")) {
 		return fmt.Errorf("no SKILL.md in %s", src)

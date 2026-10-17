@@ -12,7 +12,7 @@ import (
 
 func TestTrash(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	f := filepath.Join(t.TempDir(), "opentoggle-trash-probe.txt")
+	f := filepath.Join(t.TempDir(), "simpletoggle-trash-probe.txt")
 	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +22,7 @@ func TestTrash(t *testing.T) {
 	if _, err := os.Stat(f); !os.IsNotExist(err) {
 		t.Fatalf("file still there: %v", err)
 	}
-	matches, _ := filepath.Glob(filepath.Join(home, ".Trash", "opentoggle-trash-probe*"))
+	matches, _ := filepath.Glob(filepath.Join(home, ".Trash", "simpletoggle-trash-probe*"))
 	for _, m := range matches {
 		os.Remove(m) // 清理测试留在废纸篓里的文件
 	}

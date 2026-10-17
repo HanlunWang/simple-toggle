@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/runner"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/runner"
 )
 
 // 同时执行的 status 检查上限：脚本各自起子进程（networksetup、osascript 都不便宜）。

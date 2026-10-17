@@ -8,13 +8,13 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 工作台窗口：侧栏（开关、活动、脚本库）+ 主区。
-// 设计稿：designs/opentoggle-v2/workbench.jsx。场景与自动化随 M4 加入侧栏。
+// 设计稿：designs/simpletoggle-v2/workbench.jsx。场景与自动化随 M4 加入侧栏。
 
 const (
 	secSwitches    = "switches"

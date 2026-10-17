@@ -23,11 +23,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/keys"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/keys"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 	// opWait 是 on / off 返回前等待结果的上限；超时就返回当时的状态（与 v1 一样不阻塞）。
 	opWait = 5 * time.Second
 	// HeaderClient 标识调用方：cli、cli/agent:<名称>、mcp/<客户端名>。
-	HeaderClient = "X-OpenToggle-Client"
+	HeaderClient = "X-SimpleToggle-Client"
 )
 
 // Discovery 是发现文件的内容。
@@ -188,7 +188,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	req.source, req.detail = sourceOf(r.Header.Get(HeaderClient))
 
 	if r.Method != http.MethodGet && !s.authorized(r, parts) {
-		writeError(w, http.StatusUnauthorized, "missing or invalid token; read it from ~/.config/open-toggle/api.json (the opentoggle CLI and MCP server do this automatically)")
+		writeError(w, http.StatusUnauthorized, "missing or invalid token; read it from ~/.config/simple-toggle/api.json (the simpletoggle CLI and MCP server do this automatically)")
 		return
 	}
 	if !s.checkAI(req) {
@@ -253,7 +253,7 @@ func (s *Server) v1(q *request) {
 	m, p := q.r.Method, q.parts
 	switch {
 	case m == http.MethodGet && len(p) == 2 && p[1] == "ping":
-		writeJSON(q.w, 200, map[string]any{"app": "OpenToggle", "version": s.opts.Version, "accessibility": s.opts.AXTrusted()}, false)
+		writeJSON(q.w, 200, map[string]any{"app": "SimpleToggle", "version": s.opts.Version, "accessibility": s.opts.AXTrusted()}, false)
 	case m == http.MethodGet && len(p) == 2 && p[1] == "switches":
 		views := s.eng.List()
 		out := make([]switchDTO, 0, len(views))
@@ -281,7 +281,7 @@ func (s *Server) v2(q *request) {
 	m, p := q.r.Method, q.parts
 	switch {
 	case m == http.MethodGet && len(p) == 2 && p[1] == "ping":
-		writeJSON(q.w, 200, map[string]any{"app": "OpenToggle", "version": s.opts.Version, "accessibility": s.opts.AXTrusted(), "pid": os.Getpid()}, false)
+		writeJSON(q.w, 200, map[string]any{"app": "SimpleToggle", "version": s.opts.Version, "accessibility": s.opts.AXTrusted(), "pid": os.Getpid()}, false)
 	case m == http.MethodGet && len(p) == 2 && p[1] == "switches":
 		views := s.eng.List()
 		out := make([]switchV2DTO, 0, len(views))
@@ -555,9 +555,9 @@ func (s *Server) press(q *request) {
 	case darwin.Delivered:
 		writeJSON(q.w, 200, map[string]any{"ok": true, "key": spec.Canonical()}, false)
 	case darwin.NotTrusted:
-		writeError(q.w, 403, "accessibility permission not granted for OpenToggle — System Settings → Privacy & Security → Accessibility")
+		writeError(q.w, 403, "accessibility permission not granted for SimpleToggle — System Settings → Privacy & Security → Accessibility")
 	case darwin.NotDelivered:
-		writeError(q.w, 403, "key event was rejected by the system — re-grant Accessibility for OpenToggle")
+		writeError(q.w, 403, "key event was rejected by the system — re-grant Accessibility for SimpleToggle")
 	default:
 		writeError(q.w, 500, "failed to create the key event")
 	}

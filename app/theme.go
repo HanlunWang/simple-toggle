@@ -1,4 +1,4 @@
-// Package app 是 OpenToggle 的界面层（mygo 原生 UI）：菜单栏图标、弹出面板与各个窗口。
+// Package app 是 SimpleToggle 的界面层（mygo 原生 UI）：菜单栏图标、弹出面板与各个窗口。
 // 这是全仓库唯一 import mygo 的地方；引擎与 API 在 internal/ 下独立运行。
 package app
 
@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 设计令牌（designs/opentoggle-v2）：暖中性黑白，层级只靠前景色的透明度区分，
+// 设计令牌（designs/simpletoggle-v2）：暖中性黑白，层级只靠前景色的透明度区分，
 // 一个强调色只用在开启态、运行中与焦点上。
 type palette struct {
 	Dark               bool

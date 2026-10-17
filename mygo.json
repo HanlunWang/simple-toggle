@@ -1,16 +1,16 @@
 {
-  "name": "OpenToggle",
-  "identifier": "io.github.hanlunwang.OpenToggle",
+  "name": "SimpleToggle",
+  "identifier": "io.github.hanlunwang.SimpleToggle",
   "version": "2.0.0",
   "copyright": "© 2026 Hanlun Wang",
   "icon": "resources/icon.png",
-  "main": "./cmd/opentoggle",
+  "main": "./cmd/simpletoggle",
   "out": "build",
   "resources": [
     "skills"
   ],
   "urlSchemes": [
-    "opentoggle"
+    "simpletoggle"
   ],
   "macos": {
     "minimumSystemVersion": "14.0",
@@ -25,11 +25,11 @@
     "notarize": {
       "keychainProfile": "opentoggle-notary"
     },
-    "dmgTitle": "OpenToggle"
+    "dmgTitle": "SimpleToggle"
   },
   "updates": {
     "publicKey": "58sZwmz5rvaUrJyp3fT65R3CIRGCWhzHqUJ0rf6dYJw=",
-    "github": "HanlunWang/open-toggle",
-    "privateKey": "~/.config/opentoggle-release/mygo-update.key"
+    "github": "HanlunWang/simple-toggle",
+    "privateKey": "~/.config/simpletoggle-release/mygo-update.key"
   }
 }

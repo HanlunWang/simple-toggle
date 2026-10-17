@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 设置项（store settings）。
@@ -627,7 +627,7 @@ func (m *Manager) perform(r store.Rule, force bool) error {
 	}
 	_ = m.cfg.Store.MarkFired(r.ID, now)
 	if r.Notify {
-		m.cfg.Host.Notify("OpenToggle", detail)
+		m.cfg.Host.Notify("SimpleToggle", detail)
 	}
 	if changed && !force {
 		m.checkFlap(r, act.Target, now)
@@ -650,7 +650,7 @@ func (m *Manager) checkFlap(r store.Rule, target string, now time.Time) {
 		return
 	}
 	_ = m.cfg.Store.Suspend(r.ID, SuspendFlapping)
-	m.cfg.Host.Notify("OpenToggle", m.cfg.FlapNotice(r))
+	m.cfg.Host.Notify("SimpleToggle", m.cfg.FlapNotice(r))
 	m.Reload()
 }
 

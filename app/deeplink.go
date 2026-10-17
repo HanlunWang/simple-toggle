@@ -6,15 +6,15 @@ import (
 	"strings"
 )
 
-// opentoggle:// 深链接（快捷指令、Raycast、Alfred 调用）：
+// simpletoggle:// 深链接（快捷指令、Raycast、Alfred 调用）：
 //
-//	opentoggle://toggle/<id>          切换开关（按钮类则运行）
-//	opentoggle://on/<id>  off/<id>    打开 / 关闭
-//	opentoggle://run/<id>             运行按钮
-//	opentoggle://scene/<id或名称>     激活场景（激活中且可恢复时恢复）
-//	opentoggle://panel                打开面板
-//	opentoggle://workbench[/<分区>[/<条目>]]
-//	opentoggle://settings[/<分区>]
+//	simpletoggle://toggle/<id>          切换开关（按钮类则运行）
+//	simpletoggle://on/<id>  off/<id>    打开 / 关闭
+//	simpletoggle://run/<id>             运行按钮
+//	simpletoggle://scene/<id或名称>     激活场景（激活中且可恢复时恢复）
+//	simpletoggle://panel                打开面板
+//	simpletoggle://workbench[/<分区>[/<条目>]]
+//	simpletoggle://settings[/<分区>]
 
 type deepLink struct {
 	Verb    string // toggle on off run scene panel workbench settings
@@ -22,14 +22,14 @@ type deepLink struct {
 	Section string
 }
 
-var errBadLink = errors.New("unsupported opentoggle:// link")
+var errBadLink = errors.New("unsupported simpletoggle:// link")
 
 func parseDeepLink(raw string) (deepLink, error) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "opentoggle" {
+	if err != nil || u.Scheme != "simpletoggle" {
 		return deepLink{}, errBadLink
 	}
-	// opentoggle://toggle/x：host 是动作，path 是参数
+	// simpletoggle://toggle/x：host 是动作，path 是参数
 	parts := []string{u.Host}
 	for _, p := range strings.Split(strings.Trim(u.EscapedPath(), "/"), "/") {
 		if p == "" {

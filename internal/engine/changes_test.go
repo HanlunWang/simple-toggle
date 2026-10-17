@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 func TestChanges(t *testing.T) {

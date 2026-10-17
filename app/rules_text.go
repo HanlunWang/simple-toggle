@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 规则的文字说明（侧栏、运行记录、通知）。

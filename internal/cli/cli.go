@@ -1,4 +1,4 @@
-// Package cli 是 opentoggle 命令行：除 validate 外都通过本地控制 API 与运行中的 app 通信。
+// Package cli 是 simpletoggle 命令行：除 validate 外都通过本地控制 API 与运行中的 app 通信。
 // 命令与输出格式与 v1 一致（skill 依赖它们），另有 v2 新增的 run 与 log。
 package cli
 
@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/keys"
-	"github.com/HanlunWang/open-toggle/internal/paths"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/version"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/keys"
+	"github.com/HanlunWang/simple-toggle/internal/paths"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/version"
 )
 
 // Env 是 CLI 的输入输出，便于测试。
@@ -70,11 +70,11 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		fmt.Fprintln(e.Out, usage())
 		return 0
 	case "version":
-		fmt.Fprintf(e.Out, "OpenToggle %s\n", version.Version)
+		fmt.Fprintf(e.Out, "SimpleToggle %s\n", version.Version)
 		return 0
 	case "validate":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle validate <file.sh>")
+			return e.fail("usage: simpletoggle validate <file.sh>")
 		}
 		data, err := os.ReadFile(rest[0])
 		if err != nil {
@@ -95,17 +95,17 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		return e.list(jsonMode)
 	case "on", "off":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle %s <id>", cmd)
+			return e.fail("usage: simpletoggle %s <id>", cmd)
 		}
 		return e.call("POST", "/v1/switches/"+PathEscape(rest[0])+"/"+cmd, nil)
 	case "run":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle run <id>")
+			return e.fail("usage: simpletoggle run <id>")
 		}
 		return e.run(rest[0], jsonMode)
 	case "state":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle state <id>")
+			return e.fail("usage: simpletoggle state <id>")
 		}
 		var sw struct{ State string }
 		if code := e.get("/v1/switches/"+PathEscape(rest[0]), &sw); code != 0 {
@@ -115,17 +115,17 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		return 0
 	case "enable", "disable":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle %s <id>", cmd)
+			return e.fail("usage: simpletoggle %s <id>", cmd)
 		}
 		return e.call("POST", "/v1/switches/"+PathEscape(rest[0])+"/"+cmd, nil)
 	case "params":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle params <id>")
+			return e.fail("usage: simpletoggle params <id>")
 		}
 		return e.params(rest[0], jsonMode)
 	case "set":
 		if len(rest) < 2 {
-			return e.fail("usage: opentoggle set <id> <key>=<value> [...]")
+			return e.fail("usage: simpletoggle set <id> <key>=<value> [...]")
 		}
 		obj := map[string]string{}
 		for _, pair := range rest[1:] {
@@ -139,7 +139,7 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		return e.call("PUT", "/v1/switches/"+PathEscape(rest[0])+"/params", body)
 	case "cat":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle cat <id>")
+			return e.fail("usage: simpletoggle cat <id>")
 		}
 		return e.call("GET", "/v1/switches/"+PathEscape(rest[0])+"/script", nil)
 	case "add", "put":
@@ -150,9 +150,9 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		}
 		if len(rest) <= idx {
 			if update {
-				return e.fail("usage: opentoggle put <id> <file.sh>")
+				return e.fail("usage: simpletoggle put <id> <file.sh>")
 			}
-			return e.fail("usage: opentoggle add <file.sh>")
+			return e.fail("usage: simpletoggle add <file.sh>")
 		}
 		data, err := os.ReadFile(rest[idx])
 		if err != nil {
@@ -171,14 +171,14 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		return e.write(method, path, data, jsonMode)
 	case "rm":
 		if len(rest) == 0 {
-			return e.fail("usage: opentoggle rm <id>")
+			return e.fail("usage: simpletoggle rm <id>")
 		}
 		return e.call("DELETE", "/v1/switches/"+PathEscape(rest[0]), nil)
 	case "scenes":
 		return e.scenes(jsonMode)
 	case "scene":
 		if len(rest) < 1 {
-			return e.fail("usage: opentoggle scene <id|name> [--restore]")
+			return e.fail("usage: simpletoggle scene <id|name> [--restore]")
 		}
 		action := "toggle"
 		if flag("restore") {
@@ -306,7 +306,7 @@ func (e *Env) run(id string, jsonMode bool) exit {
 	}
 	_ = json.Unmarshal(data, &res)
 	if res.Run == nil {
-		fmt.Fprintln(e.Out, "still running (check `opentoggle log`)")
+		fmt.Fprintln(e.Out, "still running (check `simpletoggle log`)")
 		return 0
 	}
 	if out := strings.TrimRight(res.Run.Output, "\n"); out != "" {
@@ -366,7 +366,7 @@ func (e *Env) log(rest []string, jsonMode bool, args []string) exit {
 
 func (e *Env) press(rest []string, local bool) exit {
 	if len(rest) == 0 {
-		return e.fail("usage: opentoggle press <keyspec>   e.g. f15, cmd+shift+k, mouse:middle")
+		return e.fail("usage: simpletoggle press <keyspec>   e.g. f15, cmd+shift+k, mouse:middle")
 	}
 	spec, ok := keys.Parse(rest[0])
 	if !ok {
@@ -395,7 +395,7 @@ func (e *Env) press(rest []string, local bool) exit {
 		return 0
 	case darwin.NotTrusted:
 		// 不在这里弹授权框：命令行进程短命且身份随调用方变化，授权应当只给 app
-		return e.fail("OpenToggle is not running and this process has no Accessibility permission — open the app (it routes key presses) or grant Accessibility to your terminal")
+		return e.fail("SimpleToggle is not running and this process has no Accessibility permission — open the app (it routes key presses) or grant Accessibility to your terminal")
 	case darwin.NotDelivered:
 		return e.fail("key event was rejected by the system — re-grant Accessibility")
 	}
@@ -423,7 +423,7 @@ func (e *Env) reportIssues(issues []contract.Issue, jsonMode bool) {
 
 func (e *Env) doctor() {
 	exe, _ := os.Executable()
-	fmt.Fprintf(e.Out, "OpenToggle %s\n", version.Version)
+	fmt.Fprintf(e.Out, "SimpleToggle %s\n", version.Version)
 	fmt.Fprintf(e.Out, "binary:        %s\n", exe)
 	code, data, err := e.Client.Do("GET", "/v2/ping", nil)
 	var ping struct {
@@ -445,7 +445,7 @@ func (e *Env) doctor() {
 			fmt.Fprintln(e.Out, "accessibility: granted (app process)")
 		} else {
 			fmt.Fprintln(e.Out, "accessibility: NOT GRANTED for the app process")
-			fmt.Fprintln(e.Out, "               → System Settings → Privacy & Security → Accessibility → enable OpenToggle")
+			fmt.Fprintln(e.Out, "               → System Settings → Privacy & Security → Accessibility → enable SimpleToggle")
 		}
 	} else {
 		fmt.Fprintln(e.Out, "app:           not running (GUI-dependent commands will fail)")
@@ -526,9 +526,9 @@ func psField(pid int, field string) string {
 }
 
 func usage() string {
-	return fmt.Sprintf(`OpenToggle %s — script-powered menu bar switches
+	return fmt.Sprintf(`SimpleToggle %s — script-powered menu bar switches
 
-usage: opentoggle <command> [args] [--json]
+usage: simpletoggle <command> [args] [--json]
 
   list                     list switches with state
   on|off <id>              turn a switch on/off
@@ -556,7 +556,7 @@ usage: opentoggle <command> [args] [--json]
   version | help
 
 <id> is the script file name (keep-awake.sh; the .sh suffix is optional).
-All commands except validate/press/mcp/help require the OpenToggle app running.`, version.Version)
+All commands except validate/press/mcp/help require the SimpleToggle app running.`, version.Version)
 }
 
 func (e *Env) scenes(jsonMode bool) exit {
@@ -612,7 +612,7 @@ func (e *Env) scene(id, action string, jsonMode bool) exit {
 	}
 	_ = json.Unmarshal(data, &res)
 	if res.Run == nil {
-		fmt.Fprintln(e.Out, "still running (check `opentoggle log`)")
+		fmt.Fprintln(e.Out, "still running (check `simpletoggle log`)")
 		return 0
 	}
 	if out := strings.TrimRight(res.Run.Output, "\n"); out != "" {

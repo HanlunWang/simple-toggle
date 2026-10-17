@@ -1,4 +1,4 @@
-// opentoggle 是 OpenToggle 的唯一二进制：菜单栏 app、命令行与 MCP 服务器。
+// simpletoggle 是 SimpleToggle 的唯一二进制：菜单栏 app、命令行与 MCP 服务器。
 package main
 
 import (
@@ -16,17 +16,17 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"github.com/HanlunWang/open-toggle/app"
-	"github.com/HanlunWang/open-toggle/internal/api"
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/cli"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/mcp"
-	"github.com/HanlunWang/open-toggle/internal/paths"
-	"github.com/HanlunWang/open-toggle/internal/platform/darwin"
-	"github.com/HanlunWang/open-toggle/internal/presets"
-	"github.com/HanlunWang/open-toggle/internal/store"
-	"github.com/HanlunWang/open-toggle/internal/version"
+	"github.com/HanlunWang/simple-toggle/app"
+	"github.com/HanlunWang/simple-toggle/internal/api"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/cli"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/mcp"
+	"github.com/HanlunWang/simple-toggle/internal/paths"
+	"github.com/HanlunWang/simple-toggle/internal/platform/darwin"
+	"github.com/HanlunWang/simple-toggle/internal/presets"
+	"github.com/HanlunWang/simple-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/version"
 )
 
 func main() {
@@ -51,11 +51,11 @@ func main() {
 		}
 	case "serve":
 		if err := serve(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, "opentoggle serve:", err)
+			fmt.Fprintln(os.Stderr, "simpletoggle serve:", err)
 			os.Exit(1)
 		}
 	case "gui":
-		// 经软链接（如 Homebrew 的 /opt/homebrew/bin/opentoggle）调用打包好的 app 时，
+		// 经软链接（如 Homebrew 的 /opt/homebrew/bin/simpletoggle）调用打包好的 app 时，
 		// 交给 LaunchServices 按 app 身份启动；否则偏好设置、权限都会落到错误的身份上
 		exe, _ := os.Executable()
 		if resolved, err := filepath.EvalSymlinks(exe); err == nil && resolved != exe {
@@ -93,6 +93,11 @@ func serve(args []string) error {
 		return err
 	}
 	if importV1 {
+		if _, err := paths.MigrateLegacyScripts(); err != nil {
+			log.Println("migrate scripts:", err)
+		}
+	}
+	if importV1 {
 		if v, err := store.ReadV1(store.V1Domain); err == nil {
 			if _, err := st.ImportV1(v); err != nil {
 				log.Println("v1 import:", err)
@@ -113,7 +118,7 @@ func serve(args []string) error {
 		}
 	}
 	srv := api.New(eng, api.Options{Port: paths.Port(), DiscoveryPath: paths.Discovery(), Version: version.Version, Store: st})
-	// API 先于状态恢复启动：恢复拉起的 daemon 可能立刻调用 `opentoggle press`
+	// API 先于状态恢复启动：恢复拉起的 daemon 可能立刻调用 `simpletoggle press`
 	if err := srv.Start(); err != nil {
 		return err
 	}
@@ -147,7 +152,7 @@ func isTerminal(f *os.File) bool {
 // headlessHost 是无界面模式的 automation.Host：没有全局快捷键与文件监听。
 type headlessHost struct{}
 
-var errNeedsApp = errors.New("needs the OpenToggle app")
+var errNeedsApp = errors.New("needs the SimpleToggle app")
 
 func (headlessHost) RegisterShortcut(string, func()) error { return errNeedsApp }
 func (headlessHost) UnregisterShortcut(string)             {}

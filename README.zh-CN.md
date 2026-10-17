@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="resources/icon.png" width="140" alt="OpenToggle 图标">
+  <img src="resources/icon.png" width="140" alt="SimpleToggle 图标">
 </p>
 
-<h1 align="center">OpenToggle</h1>
+<h1 align="center">SimpleToggle</h1>
 
 <p align="center"><b>把任何脚本变成 macOS 菜单栏里受管理的开关。</b></p>
 
 <p align="center"><a href="README.md">English</a> | 简体中文</p>
 
-OpenToggle 把你的每个自动化脚本变成菜单栏里的一个控件：开关、常驻进程，或者按钮。脚本开头几行注释描述它，其余交给 OpenToggle：进程生命周期、状态轮询、参数界面、状态保存、场景、自动化、快捷键，以及给 AI 用的完整本地接口。
+SimpleToggle 把你的每个自动化脚本变成菜单栏里的一个控件：开关、常驻进程，或者按钮。脚本开头几行注释描述它，其余交给 SimpleToggle：进程生命周期、状态轮询、参数界面、状态保存、场景、自动化、快捷键，以及给 AI 用的完整本地接口。
 
 ## 为什么
 
 日常的 macOS 自动化——让屏幕保持常亮、切换代理、显示隐藏文件、清空 DNS 缓存——传统做法是每样装一个单一用途的小工具，菜单栏越来越挤。也有把脚本放进菜单栏的工具（SwiftBar、xbar、Hammerspoon），但它们的模型是「脚本 → 打印输出 → 显示」：开关语义、进程管理和状态保存都要每个插件自己实现。
 
-OpenToggle 的模型是「脚本 → 受管理的开关」。契约本身就是产品。
+SimpleToggle 的模型是「脚本 → 受管理的开关」。契约本身就是产品。
 
-|  | SwiftBar / xbar | Hammerspoon | **OpenToggle** |
+|  | SwiftBar / xbar | Hammerspoon | **SimpleToggle** |
 |---|---|---|---|
 | 模型 | 打印输出 → 显示 | Lua 自动化框架 | 脚本 → 受管理的开关 |
 | 开关语义 | 每个插件自己写 | 用 Lua 自己写 | 内置（开关、常驻、按钮） |
@@ -38,27 +38,27 @@ OpenToggle 的模型是「脚本 → 受管理的开关」。契约本身就是�
 - **菜单栏**——三种图标样式，可附带开启数量或倒计时，单个开关可以有自己的图标
 - **外观**——浅色、深色或跟随系统；五种强调色（默认「墨」，纯黑白）；玻璃或实色面板
 - **AI 集成**——本地 API、命令行、MCP 服务器与 agent skill；可以分项限制 AI 能做什么；AI 改脚本以差异对比展示，你确认后才写入；一键接入 Claude Code、Cursor、Codex
-- **深链接**——`opentoggle://`，可以在快捷指令、Raycast、Alfred 里调用
+- **深链接**——`simpletoggle://`，可以在快捷指令、Raycast、Alfred 里调用
 - **隐私优先**——所有数据都在本机；唯一的网络请求是检查更新
 - **简体中文与英文**，可以随时切换
 
 ## 安装
 
 ```bash
-brew install --cask hanlunwang/tap/opentoggle
+brew install --cask hanlunwang/tap/simpletoggle
 ```
 
-也可以在 [Releases](https://github.com/HanlunWang/open-toggle/releases) 下载磁盘映像。OpenToggle 使用 Developer ID 签名并经过公证，可以自动更新（更新包先校验 Ed25519 签名再安装）。需要 macOS 14 或更新版本。
+也可以在 [Releases](https://github.com/HanlunWang/simple-toggle/releases) 下载磁盘映像。SimpleToggle 使用 Developer ID 签名并经过公证，可以自动更新（更新包先校验 Ed25519 签名再安装）。需要 macOS 14 或更新版本。
 
-Homebrew 安装时会同时链接 `opentoggle` 命令。第一次启动有一个简短的引导：从脚本库挑选开关、选择外观、接入 AI 客户端，每一步都可以跳过。
+Homebrew 安装时会同时链接 `simpletoggle` 命令。第一次启动有一个简短的引导：从脚本库挑选开关、选择外观、接入 AI 客户端，每一步都可以跳过。
 
-### 从 0.5 升级
+### 从 OpenToggle 0.5 升级
 
-直接安装 2.0 覆盖 0.5（`brew upgrade --cask opentoggle`）。第一次启动时会沿用脚本目录（`~/.config/open-toggle/switches/`），并导入哪些开关开着、参数值、隐藏的开关和语言设置。bundle id 与签名身份都没有变，已经授予的「辅助功能」权限继续有效。0.5 的 `/v1` API、命令行命令和 MCP 工具名都照常可用。
+SimpleToggle 在 0.5 之前叫 OpenToggle。退出 OpenToggle，安装 SimpleToggle，再卸载 OpenToggle（`brew uninstall --cask opentoggle`）。第一次启动时，SimpleToggle 会把 `~/.config/open-toggle/switches/` 里的脚本复制到 `~/.config/simple-toggle/switches/`（旧目录保持不变），并导入哪些开关开着、参数值、隐藏的开关和语言设置。用到 `$OPENTOGGLE_BIN` 的脚本照常可用。因为 app 的身份变了，用到按键参数时需要再授予一次「辅助功能」权限；AI 客户端也要在「设置 → AI 与集成」里重新接入：命令改为 `simpletoggle`，MCP 工具改为 `simpletoggle_*`。`/v1` API 不变。
 
 ## 脚本契约
 
-一个开关就是 `~/.config/open-toggle/switches/`（可以在「设置 → 高级」里更改）下的一个可执行脚本，前 40 行里用 `# <switch.*>` 注释写元数据。
+一个开关就是 `~/.config/simple-toggle/switches/`（可以在「设置 → 高级」里更改）下的一个可执行脚本，前 40 行里用 `# <switch.*>` 注释写元数据。
 
 ```bash
 #!/bin/bash
@@ -91,7 +91,7 @@ exec caffeinate $ARGS
 | `daemon` | `<脚本> run` | app 持有进程。关闭时向它的进程组发 SIGTERM（3 秒后 SIGKILL）。退出码 0 表示自然结束，开关归位；非零 → 出错。请用 `exec` |
 | `action` | `<脚本>`（不带参数） | 退出码 0 表示成功；输出的最后一行显示为结果 |
 
-每次执行都会注入 `OPENTOGGLE_BIN`（app 的二进制路径）、`OPENTOGGLE_TRIGGER`（由谁触发）以及参数 `SWITCH_<KEY>`；`PATH` 会补上 Homebrew 的 `bin` 目录。没有 shebang 的脚本用默认 shell 执行（「设置 → 高级」）。
+每次执行都会注入 `SIMPLETOGGLE_BIN`（app 的二进制路径）、`SIMPLETOGGLE_TRIGGER`（由谁触发）以及参数 `SWITCH_<KEY>`；`PATH` 会补上 Homebrew 的 `bin` 目录。没有 shebang 的脚本用默认 shell 执行（「设置 → 高级」）。
 
 ### 参数
 
@@ -106,7 +106,7 @@ exec caffeinate $ARGS
 | `min` / `max` | number | 闭区间 |
 | `hint` | 全部 | 占位文字或提示 |
 
-含空格的值要加引号。开关开着时改参数会用新值重启。`type=key` 显示按键选择器；脚本用 `"$OPENTOGGLE_BIN" press "$SWITCH_KEY"` 发送按键（需要一次性授予「辅助功能」权限）。
+含空格的值要加引号。开关开着时改参数会用新值重启。`type=key` 显示按键选择器；脚本用 `"$SIMPLETOGGLE_BIN" press "$SWITCH_KEY"` 发送按键（需要一次性授予「辅助功能」权限）。
 
 ### 菜单栏显示
 
@@ -117,24 +117,24 @@ exec caffeinate $ARGS
 ## 命令行
 
 ```
-opentoggle list                    # 开关与状态
-opentoggle on|off <id>             # 打开或关闭
-opentoggle run <id>                # 运行按钮并打印输出
-opentoggle state <id>              # on | off | error | unknown
-opentoggle params <id>             # 参数与当前值
-opentoggle set <id> k=v [...]      # 修改参数（开着的开关会重启）
-opentoggle enable|disable <id>     # 在面板中显示或隐藏
-opentoggle cat <id>                # 打印脚本
-opentoggle add <file.sh>           # 检查并安装新开关
-opentoggle put <id> <file.sh>      # 检查并替换脚本
-opentoggle rm <id>                 # 删除（移到废纸篓）
-opentoggle scenes                  # 列出场景
-opentoggle scene <名称>            # 激活场景，激活中时恢复
-opentoggle log [id] [--failed]     # 最近的运行记录
-opentoggle validate <file.sh>      # 离线检查契约
-opentoggle press <按键>            # 模拟按键或鼠标
-opentoggle doctor                  # 诊断权限与遗留进程
-opentoggle mcp                     # stdio 上的 MCP 服务器
+simpletoggle list                    # 开关与状态
+simpletoggle on|off <id>             # 打开或关闭
+simpletoggle run <id>                # 运行按钮并打印输出
+simpletoggle state <id>              # on | off | error | unknown
+simpletoggle params <id>             # 参数与当前值
+simpletoggle set <id> k=v [...]      # 修改参数（开着的开关会重启）
+simpletoggle enable|disable <id>     # 在面板中显示或隐藏
+simpletoggle cat <id>                # 打印脚本
+simpletoggle add <file.sh>           # 检查并安装新开关
+simpletoggle put <id> <file.sh>      # 检查并替换脚本
+simpletoggle rm <id>                 # 删除（移到废纸篓）
+simpletoggle scenes                  # 列出场景
+simpletoggle scene <名称>            # 激活场景，激活中时恢复
+simpletoggle log [id] [--failed]     # 最近的运行记录
+simpletoggle validate <file.sh>      # 离线检查契约
+simpletoggle press <按键>            # 模拟按键或鼠标
+simpletoggle doctor                  # 诊断权限与遗留进程
+simpletoggle mcp                     # stdio 上的 MCP 服务器
 ```
 
 加 `--json` 输出机器可读的结果。`<id>` 是脚本文件名，`.sh` 可以省略。
@@ -144,30 +144,30 @@ opentoggle mcp                     # stdio 上的 MCP 服务器
 - **一键接入**——「设置 → AI 与集成」可以接入 Claude Code（`claude mcp add`）、Cursor（`~/.cursor/mcp.json`）和 Codex（`~/.codex/config.toml`），写入前先展示具体内容，并备份原文件。其他 MCP 客户端加入：
 
   ```json
-  { "mcpServers": { "opentoggle": { "command": "/opt/homebrew/bin/opentoggle", "args": ["mcp"] } } }
+  { "mcpServers": { "simpletoggle": { "command": "/opt/homebrew/bin/simpletoggle", "args": ["mcp"] } } }
   ```
 
 - **MCP 工具**——列出开关、开关与改参数、运行按钮、读写脚本（会检查契约）、激活场景、读取自动化与运行记录、查询待确认的修改。
 - **权限**——决定 AI 能做什么：读取、开关、改脚本、删脚本（默认不允许）。AI 改脚本会先等你确认：工作台用差异对比展示，同时发通知。这些限制用来防止 agent 误操作，不是安全边界——本机上的任何程序本来就能直接修改脚本文件。
-- **Skill**——[`skills/opentoggle/`](skills/opentoggle/SKILL.md) 教 AI 使用命令行和编写流程（写 → `validate` → `add`/`put` → 验证）。在「设置 → AI 与集成」里安装。
-- **本地 API**——`127.0.0.1:43737`，只监听本机回环；写操作需要 `~/.config/open-toggle/api.json` 里的令牌（命令行与 MCP 会自动读取）。`/v1` 与 0.5 兼容；`/v2` 新增按钮、运行记录、事件流（SSE）、场景、自动化与待确认修改。每个请求都带来源，并记录在「活动」里。
+- **Skill**——[`skills/simpletoggle/`](skills/simpletoggle/SKILL.md) 教 AI 使用命令行和编写流程（写 → `validate` → `add`/`put` → 验证）。在「设置 → AI 与集成」里安装。
+- **本地 API**——`127.0.0.1:43737`，只监听本机回环；写操作需要 `~/.config/simple-toggle/api.json` 里的令牌（命令行与 MCP 会自动读取）。`/v1` 与 OpenToggle 0.5 兼容；`/v2` 新增按钮、运行记录、事件流（SSE）、场景、自动化与待确认修改。每个请求都带来源，并记录在「活动」里。
 
 ## 深链接
 
 ```
-opentoggle://toggle/keep-awake      opentoggle://on/wifi      opentoggle://off/wifi
-opentoggle://run/flush-dns          opentoggle://scene/专注
-opentoggle://panel                  opentoggle://workbench/scenes
-opentoggle://settings/ai
+simpletoggle://toggle/keep-awake      simpletoggle://on/wifi      simpletoggle://off/wifi
+simpletoggle://run/flush-dns          simpletoggle://scene/专注
+simpletoggle://panel                  simpletoggle://workbench/scenes
+simpletoggle://settings/ai
 ```
 
 ## 隐私
 
-没有账号，没有遥测。脚本、状态和日志都保存在本机（`~/.config/open-toggle/` 与 `~/Library/Application Support/OpenToggle/`）。唯一的网络请求是到 GitHub Releases 检查更新。权限只在需要时才请求：按键参数需要「辅助功能」，想在规则里显示 Wi-Fi 名称时才需要「定位」，脚本控制其他 app 时由 macOS 询问「自动化」，第一次发通知时询问「通知」。
+没有账号，没有遥测。脚本、状态和日志都保存在本机（`~/.config/simple-toggle/` 与 `~/Library/Application Support/SimpleToggle/`）。唯一的网络请求是到 GitHub Releases 检查更新。权限只在需要时才请求：按键参数需要「辅助功能」，想在规则里显示 Wi-Fi 名称时才需要「定位」，脚本控制其他 app 时由 macOS 询问「自动化」，第一次发通知时询问「通知」。
 
 ## 从源码构建
 
-OpenToggle 2 用 Go 和 [mygo](https://github.com/egoist/mygo) 编写（原生 GPU 界面，不用 WebView）。引擎、API、命令行与 MCP 服务器在 `internal/`，不依赖界面框架；`app/` 是界面。
+SimpleToggle 2 用 Go 和 [mygo](https://github.com/egoist/mygo) 编写（原生 GPU 界面，不用 WebView）。引擎、API、命令行与 MCP 服务器在 `internal/`，不依赖界面框架；`app/` 是界面。
 
 ```bash
 go test ./...                    # 单元测试与端到端测试
@@ -175,7 +175,7 @@ go tool mygo dev                 # 运行 app，修改后自动重载
 go tool mygo build               # 签名、公证的 app 与磁盘映像（需要 mygo.json 里的签名身份）
 ```
 
-架构方案与各里程碑的记录在 [docs/v2-architecture.md](docs/v2-architecture.md)。OpenToggle 0.5（Swift）保留在 `main` 分支的历史里。
+架构方案与各里程碑的记录在 [docs/v2-architecture.md](docs/v2-architecture.md)。它的前身 OpenToggle 0.5（Swift）保留在 `main` 分支的历史里。
 
 ## 许可证
 

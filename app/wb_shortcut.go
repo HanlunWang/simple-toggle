@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
 )
 
 // 快捷键录制：点一下进入录制，按下组合键即保存；Esc 取消，Delete / Backspace 清除。

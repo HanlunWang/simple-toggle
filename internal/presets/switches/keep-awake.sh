@@ -6,7 +6,7 @@
 # <switch.param> key=duration type=number label="Duration (min)" default=0 min=0 max=1440 presets="Unlimited=0|1 h=60|2 h=120|4 h=240|8 h=480" hint="0 = no limit"
 # <switch.menubar> mode=add icon=lucide:coffee countdown=on
 #
-# Daemon contract: OpenToggle launches `<script> run` and holds the
+# Daemon contract: SimpleToggle launches `<script> run` and holds the
 # process; turning the switch off sends SIGTERM. `exec` replaces this
 # shell so the signal reaches caffeinate directly. With -t the process
 # exits naturally (exit 0) and the app resets the switch.

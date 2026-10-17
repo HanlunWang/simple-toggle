@@ -5,7 +5,7 @@
 # <switch.description> Set the input volume to zero; turning it off restores the previous level
 #
 # The previous input volume is kept in a file under $TMPDIR.
-SAVED="${TMPDIR:-/tmp}/opentoggle-mic-volume"
+SAVED="${TMPDIR:-/tmp}/simpletoggle-mic-volume"
 case "$1" in
   on)
     osascript -e 'input volume of (get volume settings)' > "$SAVED"

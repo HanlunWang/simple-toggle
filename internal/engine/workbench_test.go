@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 func TestWorkbenchCommands(t *testing.T) {

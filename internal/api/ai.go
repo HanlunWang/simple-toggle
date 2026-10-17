@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // AI 权限分级与「改脚本前先确认」。只对标记为 AI 来源的请求生效：这是防止 agent
@@ -82,7 +82,7 @@ func (s *Server) checkAI(q *request) bool {
 		return true
 	}
 	writeError(q.w, http.StatusForbidden, fmt.Sprintf(
-		"OpenToggle's settings do not allow AI agents to %s. Ask the user to allow it in Settings → AI & Integrations.", permWords[perm]))
+		"SimpleToggle's settings do not allow AI agents to %s. Ask the user to allow it in Settings → AI & Integrations.", permWords[perm]))
 	return false
 }
 
@@ -136,8 +136,8 @@ func (s *Server) propose(q *request, id string) {
 	}
 	writeJSON(q.w, http.StatusAccepted, pendingDTO{
 		Pending: true, ChangeID: c.ID, Status: c.Status, Issues: issuesOrEmpty(issues), Change: changeOut(c),
-		Message: fmt.Sprintf("The script is waiting for the user's approval in OpenToggle; nothing was written yet. "+
-			"Tell the user, then check the result with opentoggle_change_status (GET /v2/changes/%s).", c.ID),
+		Message: fmt.Sprintf("The script is waiting for the user's approval in SimpleToggle; nothing was written yet. "+
+			"Tell the user, then check the result with simpletoggle_change_status (GET /v2/changes/%s).", c.ID),
 	}, true)
 }
 
@@ -160,6 +160,6 @@ func (s *Server) changes(q *request) {
 		}
 		writeJSON(q.w, 200, changeOut(c), true)
 	default:
-		writeError(q.w, 404, fmt.Sprintf("unknown route %s %s (changes are approved in the OpenToggle app)", m, q.r.URL.Path))
+		writeError(q.w, 404, fmt.Sprintf("unknown route %s %s (changes are approved in the SimpleToggle app)", m, q.r.URL.Path))
 	}
 }

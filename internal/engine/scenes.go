@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 场景：按顺序执行的一组步骤。激活时记下各成员激活前的状态，开启「恢复」时再点一次

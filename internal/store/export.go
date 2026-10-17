@@ -7,7 +7,7 @@ import (
 
 // Export 是「导出配置」的内容：用户对开关的安排、场景、规则与设置；脚本由调用方附上。
 type Export struct {
-	Format   string                       `json:"format"` // "opentoggle-config"
+	Format   string                       `json:"format"` // "simpletoggle-config"
 	Version  int                          `json:"version"`
 	Exported time.Time                    `json:"exported"`
 	Settings map[string]string            `json:"settings,omitempty"`
@@ -20,7 +20,7 @@ type Export struct {
 }
 
 // ExportFormat 标识导出文件。
-const ExportFormat = "opentoggle-config"
+const ExportFormat = "simpletoggle-config"
 
 // 不导出、导入时也不覆盖的设置（只属于这台机器）。
 var localSettings = map[string]bool{"onboarded": true, "advanced.scriptsDir": true}

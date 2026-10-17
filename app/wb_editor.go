@@ -11,10 +11,10 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/runner"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/runner"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // ───────── 文档 ─────────
@@ -67,7 +67,7 @@ func (d *doc) sync(pal palette) {
 		if is.Severity == "error" {
 			sev = editor.SeverityError
 		}
-		diags = append(diags, editor.Diagnostic{Start: start, End: end, Severity: sev, Message: issueText(is), Source: "OpenToggle"})
+		diags = append(diags, editor.Diagnostic{Start: start, End: end, Severity: sev, Message: issueText(is), Source: "SimpleToggle"})
 	}
 	d.st.SetDiagnostics(v, diags)
 	d.band[0], d.band[1], d.hasBand = 0, 0, false
@@ -185,7 +185,7 @@ func template(t contract.Type, name string) string {
 			"# the last line of output is shown in the panel.\necho \"done\"\n"
 	case contract.Daemon:
 		return head + "# <switch.icon> lucide:repeat\n# <switch.type> daemon\n#\n" +
-			"# OpenToggle runs `<script> run` and keeps the process; turning the\n" +
+			"# SimpleToggle runs `<script> run` and keeps the process; turning the\n" +
 			"# switch off sends SIGTERM. `exec` lets the signal reach your command.\n" +
 			"exec caffeinate -d\n"
 	default:

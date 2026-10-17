@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 func waitRun(t *testing.T, ch <-chan store.Run) store.Run {

@@ -3,11 +3,11 @@ package app
 import (
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/runner"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/runner"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // Backend 是界面对引擎的全部依赖；*engine.Engine 实现它，测试用替身。

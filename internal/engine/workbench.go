@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/runner"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/runner"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // 工作台用到的命令：立即检查状态、读取常驻进程输出、运行记录、单开关设置、从脚本库安装。

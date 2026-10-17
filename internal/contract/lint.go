@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HanlunWang/open-toggle/internal/keys"
+	"github.com/HanlunWang/simple-toggle/internal/keys"
 )
 
 // Issue 是一条检查结果：error 拒收，warning 放行但随响应返回。
@@ -24,7 +24,7 @@ var Messages = map[string]string{
 	"missing_shebang":               "Missing shebang on line 1; the script will be executed with /bin/sh as a fallback",
 	"missing_name":                  "Missing required directive: # <switch.name> <display name>",
 	"invalid_type":                  "Invalid <switch.type> %q; expected \"toggle\", \"daemon\" or \"action\"",
-	"icon_sf_unmapped":              "<switch.icon>: SF Symbol %q has no OpenToggle icon mapping; a generic icon will be shown (use lucide:<name> or an emoji)",
+	"icon_sf_unmapped":              "<switch.icon>: SF Symbol %q has no SimpleToggle icon mapping; a generic icon will be shown (use lucide:<name> or an emoji)",
 	"icon_lucide_empty":             "<switch.icon>: empty lucide icon name",
 	"param_missing_key":             "<switch.param> #%d: missing required attribute key=",
 	"param_duplicate_key":           "<switch.param> #%d: duplicate param key %q",
@@ -39,7 +39,7 @@ var Messages = map[string]string{
 	"param_number_bad_default":      "<switch.param> #%d: default %q is not an integer",
 	"param_key_bad_default":         "<switch.param> #%d: default %q is not a valid key spec (expected e.g. f15, cmd+shift+k, mouse:middle)",
 	"menubar_missing_icon":          "<switch.menubar>: missing required attribute icon=",
-	"menubar_icon_sf_unmapped":      "<switch.menubar> icon: SF Symbol %q has no OpenToggle icon mapping; a generic icon will be shown (use lucide:<name> or an emoji)",
+	"menubar_icon_sf_unmapped":      "<switch.menubar> icon: SF Symbol %q has no SimpleToggle icon mapping; a generic icon will be shown (use lucide:<name> or an emoji)",
 	"menubar_icon_lucide_empty":     "<switch.menubar> icon: empty lucide icon name",
 	"menubar_bad_mode":              "<switch.menubar>: unknown mode %q; expected add | replace (falling back to add)",
 	"menubar_countdown_no_duration": "<switch.menubar>: countdown=on requires a number param with key=duration (minutes); the countdown will not be shown",

@@ -10,18 +10,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HanlunWang/open-toggle/internal/api"
-	"github.com/HanlunWang/open-toggle/internal/paths"
+	"github.com/HanlunWang/simple-toggle/internal/api"
+	"github.com/HanlunWang/simple-toggle/internal/paths"
 )
 
 // ErrNotRunning 表示连不上 app。
-var ErrNotRunning = errors.New("OpenToggle is not running — open the app first")
+var ErrNotRunning = errors.New("SimpleToggle is not running — open the app first")
 
 // Client 是控制 API 的客户端（CLI 与 MCP 共用）。
 type Client struct {
 	Base   string
 	Token  string
-	Caller string // X-OpenToggle-Client
+	Caller string // X-SimpleToggle-Client
 	HTTP   *http.Client
 }
 
@@ -63,9 +63,9 @@ func (c *Client) Do(method, path string, body []byte) (int, []byte, error) {
 }
 
 // AgentName 识别由 AI agent 调用的情况，用于运行记录的来源。
-// OPENTOGGLE_AGENT 可由任何 agent 自报名称；CLAUDECODE 由 Claude Code 设置。
+// SIMPLETOGGLE_AGENT 可由任何 agent 自报名称；CLAUDECODE 由 Claude Code 设置。
 func AgentName() string {
-	if v := strings.TrimSpace(os.Getenv("OPENTOGGLE_AGENT")); v != "" {
+	if v := strings.TrimSpace(os.Getenv("SIMPLETOGGLE_AGENT")); v != "" {
 		return v
 	}
 	if os.Getenv("CLAUDECODE") != "" {

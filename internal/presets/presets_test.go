@@ -3,7 +3,7 @@ package presets
 import (
 	"testing"
 
-	"github.com/HanlunWang/open-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
 )
 
 func TestCatalog(t *testing.T) {

@@ -13,7 +13,7 @@ func testEnv(t *testing.T) (Env, *[]string) {
 	home := t.TempDir()
 	var ran []string
 	env := Env{
-		Home: home, Bin: "/Applications/OpenToggle.app/Contents/MacOS/opentoggle",
+		Home: home, Bin: "/Applications/SimpleToggle.app/Contents/MacOS/simpletoggle",
 		LookPath: func(name string) (string, error) {
 			if name == "claude" {
 				return "/opt/homebrew/bin/claude", nil
@@ -38,7 +38,7 @@ func TestCursor(t *testing.T) {
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, "mcp.json"), []byte(`{"mcpServers": {"other": {"command": "x"}}, "keep": true}`), 0o600)
 	p, err := env.Plan(Cursor)
-	if err != nil || !strings.Contains(p.After, `"opentoggle"`) || !strings.Contains(p.After, `"other"`) || !strings.Contains(p.After, `"keep": true`) {
+	if err != nil || !strings.Contains(p.After, `"simpletoggle"`) || !strings.Contains(p.After, `"other"`) || !strings.Contains(p.After, `"keep": true`) {
 		t.Fatalf("plan: %v\n%s", err, p.After)
 	}
 	if err := env.Apply(p); err != nil {
@@ -64,17 +64,17 @@ func TestCodex(t *testing.T) {
 	env, _ := testEnv(t)
 	dir := filepath.Join(env.Home, ".codex")
 	os.MkdirAll(dir, 0o755)
-	old := "model = \"gpt-5\"\n\n[mcp_servers.opentoggle]\ncommand = \"/old/opentoggle\"\nargs = [\"mcp\"]\n\n[mcp_servers.opentoggle.env]\nX = \"1\"\n\n[mcp_servers.other]\ncommand = \"y\"\n"
+	old := "model = \"gpt-5\"\n\n[mcp_servers.simpletoggle]\ncommand = \"/old/simpletoggle\"\nargs = [\"mcp\"]\n\n[mcp_servers.simpletoggle.env]\nX = \"1\"\n\n[mcp_servers.other]\ncommand = \"y\"\n"
 	os.WriteFile(filepath.Join(dir, "config.toml"), []byte(old), 0o644)
 	st := env.Status(Codex)
-	if !st.Connected || st.Command != "/old/opentoggle" || st.Current {
+	if !st.Connected || st.Command != "/old/simpletoggle" || st.Current {
 		t.Fatalf("detect old: %+v", st)
 	}
 	p, _ := env.Plan(Codex)
-	if strings.Contains(p.After, "/old/opentoggle") || strings.Contains(p.After, "X = \"1\"") || !strings.Contains(p.After, "[mcp_servers.other]") || !strings.Contains(p.After, "model = \"gpt-5\"") {
+	if strings.Contains(p.After, "/old/simpletoggle") || strings.Contains(p.After, "X = \"1\"") || !strings.Contains(p.After, "[mcp_servers.other]") || !strings.Contains(p.After, "model = \"gpt-5\"") {
 		t.Fatalf("plan:\n%s", p.After)
 	}
-	if strings.Count(p.After, "[mcp_servers.opentoggle]") != 1 {
+	if strings.Count(p.After, "[mcp_servers.simpletoggle]") != 1 {
 		t.Fatalf("duplicate section:\n%s", p.After)
 	}
 	env.Apply(p)
@@ -84,7 +84,7 @@ func TestCodex(t *testing.T) {
 	// 没有配置文件时新建
 	env2, _ := testEnv(t)
 	p2, _ := env2.Plan(Codex)
-	if p2.After != "[mcp_servers.opentoggle]\ncommand = \"/Applications/OpenToggle.app/Contents/MacOS/opentoggle\"\nargs = [\"mcp\"]\n" {
+	if p2.After != "[mcp_servers.simpletoggle]\ncommand = \"/Applications/SimpleToggle.app/Contents/MacOS/simpletoggle\"\nargs = [\"mcp\"]\n" {
 		t.Fatalf("fresh:\n%q", p2.After)
 	}
 }
@@ -92,10 +92,10 @@ func TestCodex(t *testing.T) {
 func TestClaudeCode(t *testing.T) {
 	env, ran := testEnv(t)
 	p, err := env.Plan(ClaudeCode)
-	if err != nil || len(p.Commands) != 1 || !strings.Contains(p.Describe(), "mcp add --scope user opentoggle -- /Applications/OpenToggle.app/Contents/MacOS/opentoggle mcp") {
+	if err != nil || len(p.Commands) != 1 || !strings.Contains(p.Describe(), "mcp add --scope user simpletoggle -- /Applications/SimpleToggle.app/Contents/MacOS/simpletoggle mcp") {
 		t.Fatalf("plan: %v %q", err, p.Describe())
 	}
-	os.WriteFile(filepath.Join(env.Home, ".claude.json"), []byte(`{"mcpServers": {"opentoggle": {"command": "/Users/x/.local/bin/opentoggle", "args": ["mcp"]}}}`), 0o600)
+	os.WriteFile(filepath.Join(env.Home, ".claude.json"), []byte(`{"mcpServers": {"simpletoggle": {"command": "/Users/x/.local/bin/simpletoggle", "args": ["mcp"]}}}`), 0o600)
 	st := env.Status(ClaudeCode)
 	if !st.Present || !st.Connected || st.Current {
 		t.Fatalf("detect v1: %+v", st)
@@ -143,13 +143,13 @@ func TestSkill(t *testing.T) {
 func TestSymlinkCountsAsCurrent(t *testing.T) {
 	env, _ := testEnv(t)
 	dir := t.TempDir()
-	bin := filepath.Join(dir, "opentoggle")
+	bin := filepath.Join(dir, "simpletoggle")
 	os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
 	link := filepath.Join(dir, "link")
 	os.Symlink(bin, link)
 	env.Bin = bin
 	os.MkdirAll(filepath.Join(env.Home, ".cursor"), 0o755)
-	os.WriteFile(filepath.Join(env.Home, ".cursor", "mcp.json"), []byte(`{"mcpServers":{"opentoggle":{"command":"`+link+`"}}}`), 0o600)
+	os.WriteFile(filepath.Join(env.Home, ".cursor", "mcp.json"), []byte(`{"mcpServers":{"simpletoggle":{"command":"`+link+`"}}}`), 0o600)
 	if st := env.Status(Cursor); !st.Current {
 		t.Fatalf("symlink to the same binary should count as current: %+v", st)
 	}

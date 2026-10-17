@@ -3,7 +3,7 @@ package app
 import (
 	"strconv"
 
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
 // Prefs 是界面偏好，存在 store 的 settings 里（键为 "ui.<名称>"）。

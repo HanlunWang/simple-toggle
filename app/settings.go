@@ -14,14 +14,14 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/integrations"
-	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/integrations"
+	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
-// 设置窗口：左侧九个分区，右侧分组卡片（designs/opentoggle-v2/settings.jsx）。
+// 设置窗口：左侧九个分区，右侧分组卡片（designs/simpletoggle-v2/settings.jsx）。
 // 只放真正生效的选项；读写都经 settingsHost，由界面层负责让改动立即生效。
 
 // settingsHost 是设置窗口对外的全部依赖（测试里用替身）。

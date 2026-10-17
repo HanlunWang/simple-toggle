@@ -11,10 +11,10 @@ import (
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
-	"github.com/HanlunWang/open-toggle/internal/automation"
-	"github.com/HanlunWang/open-toggle/internal/contract"
-	"github.com/HanlunWang/open-toggle/internal/engine"
-	"github.com/HanlunWang/open-toggle/internal/keys"
+	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
+	"github.com/HanlunWang/simple-toggle/internal/keys"
 )
 
 // panel 是菜单栏弹出面板的状态与视图。所有字段只在主线程读写。
@@ -198,7 +198,7 @@ func (p *panel) view(c *ui.Context) {
 func (p *panel) header(c *ui.Context) {
 	pal := p.pal
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Padding(12, 12, 8, 16).Children(func() {
-		ui.Text(c, "OpenToggle").FontSize(13).FontWeight(600).TextColor(pal.T1)
+		ui.Text(c, "SimpleToggle").FontSize(13).FontWeight(600).TextColor(pal.T1)
 		if n := p.onCount(); n > 0 {
 			ui.Textf(c, tr("on_count"), n).Font("monospace").FontSize(11).TextColor(pal.T3)
 		}

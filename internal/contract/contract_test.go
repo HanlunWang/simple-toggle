@@ -103,7 +103,7 @@ func TestLintMessages(t *testing.T) {
 		{"#!/bin/sh\n# <switch.name> A\necho on\n", `does not reference "status"`, "warning"},
 		{"#!/bin/sh\n# <switch.name> A\n# <switch.type> daemon\nsleep 9\n", "neither uses `exec` nor traps TERM", "warning"},
 		{"#!/bin/sh\n# <switch.name> A\n# <switch.type> action\ncase \"$1\" in on) ;; esac\n", "run without arguments", "warning"},
-		{"#!/bin/sh\n# <switch.name> A\n# <switch.icon> sf:not.a.symbol\necho status\n", "has no OpenToggle icon mapping", "warning"},
+		{"#!/bin/sh\n# <switch.name> A\n# <switch.icon> sf:not.a.symbol\necho status\n", "has no SimpleToggle icon mapping", "warning"},
 		{"#!/bin/sh\n# <switch.name> A\n", "no executable statements", "warning"},
 		{"#!/bin/sh\n# <switch.name> A\n# <switch.param> key=a-b\n# <switch.param> key=a_b\necho status\n", "same environment variable", "error"},
 	}
