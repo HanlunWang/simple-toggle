@@ -90,19 +90,19 @@ const v1Plist = `<?xml version="1.0" encoding="UTF-8"?>
 	<string>-1269 207 1000 640</string>
 	<key>NSBlob</key>
 	<data>AAEC</data>
-	<key>SimpleToggle.desiredStates</key>
+	<key>OpenToggle.desiredStates</key>
 	<dict>
 		<key>dock-autohide.sh</key>
 		<integer>1</integer>
 		<key>keep-awake.sh</key>
 		<false/>
 	</dict>
-	<key>SimpleToggle.disabledSwitches</key>
+	<key>OpenToggle.disabledSwitches</key>
 	<array>
 		<string>wifi.sh</string>
 		<string>摸鱼模式.sh</string>
 	</array>
-	<key>SimpleToggle.paramValues</key>
+	<key>OpenToggle.paramValues</key>
 	<dict>
 		<key>keep-awake.sh</key>
 		<dict>
@@ -112,9 +112,9 @@ const v1Plist = `<?xml version="1.0" encoding="UTF-8"?>
 			<string>dis</string>
 		</dict>
 	</dict>
-	<key>SimpleToggle.seededScripts</key>
+	<key>OpenToggle.seededScripts</key>
 	<array><string>keep-awake.sh</string></array>
-	<key>SimpleToggle.language</key>
+	<key>OpenToggle.language</key>
 	<string>zh-Hans</string>
 </dict>
 </plist>`
@@ -240,5 +240,21 @@ func TestRealV1Import(t *testing.T) {
 	t.Logf("language: %q → setting %q", v.Language, s.Setting("language"))
 	if again, _ := s.ImportV1(v); again {
 		t.Fatal("import ran twice")
+	}
+}
+
+// 0.5 的偏好键名必须保持 OpenToggle.*（项目更名不影响旧数据）。
+func TestV1KeysKeepOldName(t *testing.T) {
+	src, err := os.ReadFile("v1import.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"OpenToggle.desiredStates", "OpenToggle.disabledSwitches", "OpenToggle.seededScripts", "OpenToggle.paramValues", "OpenToggle.language"} {
+		if !strings.Contains(string(src), `"`+k+`"`) {
+			t.Errorf("v1 key %q missing", k)
+		}
+	}
+	if V1Domain != "io.github.hanlunwang.OpenToggle" {
+		t.Errorf("v1 domain %q", V1Domain)
 	}
 }

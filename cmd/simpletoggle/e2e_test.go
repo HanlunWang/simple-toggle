@@ -339,3 +339,19 @@ func TestMCP(t *testing.T) {
 		t.Fatalf("missing switch: %s", text)
 	}
 }
+
+func TestIsTerminal(t *testing.T) {
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	if isTerminal(null) {
+		t.Fatal("/dev/null is not a terminal (apps launched from Finder get it as stdout)")
+	}
+	f, _ := os.CreateTemp(t.TempDir(), "out")
+	defer f.Close()
+	if isTerminal(f) {
+		t.Fatal("a file is not a terminal")
+	}
+}

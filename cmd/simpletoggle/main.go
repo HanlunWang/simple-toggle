@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"golang.org/x/sys/unix"
 
 	"github.com/HanlunWang/simple-toggle/app"
 	"github.com/HanlunWang/simple-toggle/internal/api"
@@ -144,9 +145,11 @@ func runGUI() {
 	}
 }
 
+// isTerminal 报告 f 是否连着终端。只看「字符设备」不够：从 Finder、Dock 或开机启动时
+// 标准输出是 /dev/null，它也是字符设备，会被误认成终端而打印帮助后退出。
 func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+	_, err := unix.IoctlGetTermios(int(f.Fd()), unix.TIOCGETA)
+	return err == nil
 }
 
 // headlessHost 是无界面模式的 automation.Host：没有全局快捷键与文件监听。

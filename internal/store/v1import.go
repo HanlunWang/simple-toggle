@@ -43,14 +43,14 @@ func ParseV1Plist(data []byte) (V1Data, error) {
 		return V1Data{}, fmt.Errorf("v1 preferences: root is not a dictionary")
 	}
 	v := V1Data{Desired: map[string]bool{}, Params: map[string]map[string]string{}}
-	if m, ok := dict["SimpleToggle.desiredStates"].(map[string]any); ok {
+	if m, ok := dict["OpenToggle.desiredStates"].(map[string]any); ok {
 		for id, raw := range m {
 			v.Desired[id] = truthyAny(raw)
 		}
 	}
-	v.Hidden = stringsOf(dict["SimpleToggle.disabledSwitches"])
-	v.Seeded = stringsOf(dict["SimpleToggle.seededScripts"])
-	if m, ok := dict["SimpleToggle.paramValues"].(map[string]any); ok {
+	v.Hidden = stringsOf(dict["OpenToggle.disabledSwitches"])
+	v.Seeded = stringsOf(dict["OpenToggle.seededScripts"])
+	if m, ok := dict["OpenToggle.paramValues"].(map[string]any); ok {
 		for id, raw := range m {
 			pm, ok := raw.(map[string]any)
 			if !ok {
@@ -62,7 +62,7 @@ func ParseV1Plist(data []byte) (V1Data, error) {
 			}
 		}
 	}
-	if s, ok := dict["SimpleToggle.language"].(string); ok {
+	if s, ok := dict["OpenToggle.language"].(string); ok {
 		v.Language = s
 	}
 	return v, nil
