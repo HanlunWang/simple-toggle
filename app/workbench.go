@@ -34,6 +34,8 @@ type workbench struct {
 	// 由窗口层注入；测试里用替身
 	onMain             func(fn func()) // 回到主线程执行并重绘
 	openPath           func(path string)
+	revealDir          func(path string) // 在 Finder 中打开目录
+	openSettings       func()
 	reveal             func(path string)
 	exportRuns         func(runs []store.Run) // 选择位置并写出（异步，结果用 setNotice 报告）
 	closeWin           func()                 // 关闭窗口（处理完未保存的修改之后）
@@ -75,6 +77,11 @@ type workbench struct {
 
 	closeAsk bool // 关闭窗口时有未保存的修改
 
+	// AI 提交的待确认修改
+	changes     []store.Change
+	selChange   string
+	changeViews map[string]*changeView
+
 	// 场景、自动化与快捷键
 	auto          Automation
 	scenes        []engine.SceneView
@@ -83,9 +90,7 @@ type workbench struct {
 	selRule       string
 	sceneDraft    map[string]store.Scene
 	ruleDraft     map[string]store.Rule
-	recording     string            // 正在录制快捷键的那个输入
-	recorded      map[string]string // 录到的快捷键，下一次构建时交给对应的输入
-	recordErr     string
+	rec           recorder
 	stepPick      string
 	sceneIcon     bool
 	ruleNote      map[string]string // 规则 id → 不完整的原因
@@ -126,10 +131,11 @@ func newWorkbench(b Backend, prefs Prefs) *workbench {
 		docs: map[string]*doc{}, fields: map[string]*fieldState{}, outputs: map[string][]outLine{},
 		savedAt: map[string]time.Time{}, busy: map[string]bool{},
 		inspector: true, bottomOpen: true, paramOpen: -1, runSel: 0,
-		recorded: map[string]string{}, sceneDraft: map[string]store.Scene{}, ruleDraft: map[string]store.Rule{}, ruleNote: map[string]string{},
+		changeViews: map[string]*changeView{}, sceneDraft: map[string]store.Scene{}, ruleDraft: map[string]store.Rule{}, ruleNote: map[string]string{},
 		actFilter: "all", libCat: "all",
 		onMain:             func(fn func()) { fn() },
 		openPath:           func(string) {},
+		revealDir:          func(string) {},
 		reveal:             func(string) {},
 		reduceTransparency: func() bool { return false },
 	}
@@ -146,6 +152,10 @@ func (w *workbench) handle(ev engine.Event) {
 	case engine.EventRun:
 		w.runsDirty = true
 	case engine.EventScene:
+	case engine.EventChange:
+		if ev.Switch != "" {
+			delete(w.changeViews, ev.Switch)
+		}
 	}
 }
 
@@ -156,6 +166,7 @@ func (w *workbench) load() {
 	w.dirty = false
 	w.views = w.b.List()
 	w.scenes = w.b.Scenes()
+	w.changes = w.b.Changes()
 	if w.auto != nil {
 		w.rules = w.auto.Rules()
 	}
@@ -223,6 +234,8 @@ func (w *workbench) render(c *ui.Context) {
 		ui.Column(c.Key("main")).Grow(1).MinWidth(0).FillHeight().Background(pal.BG).
 			BorderWidth(0, 0, 0, 1).BorderColor(pal.L2).Children(func() {
 			switch w.section {
+			case secChanges:
+				w.changeEditor(c)
 			case secScenes:
 				w.sceneEditor(c)
 			case secAutomations:
@@ -237,12 +250,13 @@ func (w *workbench) render(c *ui.Context) {
 		})
 	})
 	if w.closeAsk {
-		switch ui.AlertDialog(c.Key("close-dialog"), &w.closeAsk, tr("close_title"), tr("close_msg"), tr("save_all"), tr("discard"), tr("cancel")) {
-		case 0:
+		// 按钮从左到右：放弃修改、取消、全部保存（最后一个是默认按钮）
+		switch ui.AlertDialog(c.Key("close-dialog"), &w.closeAsk, tr("close_title"), tr("close_msg"), tr("discard"), tr("cancel"), tr("save_all")) {
+		case 2:
 			if w.saveAll() && w.closeWin != nil {
 				w.closeWin()
 			}
-		case 1:
+		case 0:
 			for id, d := range w.docs {
 				if d.modified() {
 					delete(w.docs, id)
@@ -276,6 +290,16 @@ func (w *workbench) sidebar(c *ui.Context) {
 	bar := c.TitleBar()
 	ui.Row(c.Key("side-top")).FillWidth().Height(max(bar.Height, 46)).Shrink(0).DragWindow()
 	ui.Column(c.Key("nav")).FillWidth().Padding(0, 8, 8).Gap(1).Children(func() {
+		if n := w.pendingCount(); n > 0 || w.section == secChanges {
+			item := pal.navItem(c, "nav-changes", "shield-alert", tr("chg_title"), w.section == secChanges, false, func() {
+				if n > 0 {
+					pal.badge(c, itoa(n), "amber")
+				}
+			})
+			if item.Clicked() {
+				w.open(secChanges, "")
+			}
+		}
 		nav := []struct{ id, iconName, label string }{
 			{secSwitches, "toggle-right", tr("nav_switches")},
 			{secScenes, "layers", tr("nav_scenes")},
@@ -312,6 +336,8 @@ func (w *workbench) sidebar(c *ui.Context) {
 	ui.Box(c).FillWidth().Height(1).Margin(0, 14).Background(pal.L2)
 	ui.Scroll(c.Key("side-list")).FillWidth().Grow(1).Padding(2, 8, 8).Children(func() {
 		switch w.section {
+		case secChanges:
+			w.changeList(c)
 		case secScenes:
 			w.sceneList(c)
 		case secAutomations:
@@ -337,7 +363,10 @@ func (w *workbench) sidebar(c *ui.Context) {
 		})
 		ui.Spacer(c)
 		if pal.iconBtn(c, "open-folder", "folder", tr("open_folder"), false).Clicked() {
-			w.openPath(w.b.ScriptsDir())
+			w.revealDir(w.b.ScriptsDir())
+		}
+		if w.openSettings != nil && pal.iconBtn(c, "open-settings", "settings", tr("settings"), false).Clicked() {
+			w.openSettings()
 		}
 	})
 }

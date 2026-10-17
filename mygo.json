@@ -6,6 +6,9 @@
   "icon": "resources/icon.png",
   "main": "./cmd/opentoggle",
   "out": "build",
+  "urlSchemes": [
+    "opentoggle"
+  ],
   "macos": {
     "minimumSystemVersion": "14.0",
     "infoPlist": {

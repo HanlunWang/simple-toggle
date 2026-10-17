@@ -470,3 +470,22 @@ func TestLoop(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+func TestMasterSwitch(t *testing.T) {
+	r := newRig(t, rule(KindWake, "wake", "", "on", "lamp.sh"), rule(KindShortcut, "", "ctrl+alt+9", "run", "ping.sh"))
+	r.e.views["ping.sh"].Meta.Shortcut = "ctrl+alt+p"
+	r.m.SetEnabled(false)
+	r.m.apply()
+	r.m.handle(Event{Kind: KindWake, Event: "wake"})
+	expect(t, r.e.took())
+	if _, ok := r.h.keys["ctrl+alt+9"]; ok {
+		t.Fatal("rule shortcut registered while automations are off")
+	}
+	if _, ok := r.h.keys["ctrl+alt+p"]; !ok {
+		t.Fatal("switch shortcuts should keep working")
+	}
+	r.m.SetEnabled(true)
+	r.m.apply()
+	r.m.handle(Event{Kind: KindWake, Event: "wake"})
+	expect(t, r.e.took(), "set lamp.sh on automation")
+}

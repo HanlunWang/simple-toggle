@@ -71,6 +71,7 @@ type Config struct {
 	PollVisible    time.Duration // 面板可见时的状态轮询间隔，默认 5 秒
 	PollHidden     time.Duration // 后台轮询间隔，默认 30 秒
 	ExtraEnv       func() []string
+	NoRestore      bool // 启动时不恢复上次开着的开关
 }
 
 // Switch 是一个已解析的脚本。
@@ -110,6 +111,8 @@ type Engine struct {
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 
+	cfgMu sync.Mutex // 保护可在运行中修改的 DefaultTimeout 与 Shell
+
 	sceneOp    sync.Mutex             // 场景串行执行
 	sceneState map[string]*sceneState // 激活中的场景（激活前状态与目标状态）
 }
@@ -148,7 +151,9 @@ func (e *Engine) Start() error {
 	}
 	e.reload()
 	e.sweepOrphans()
-	e.restoreDesired()
+	if !e.cfg.NoRestore {
+		e.restoreDesired()
+	}
 	e.wg.Add(1)
 	go e.loop()
 	return nil
@@ -179,6 +184,28 @@ func (e *Engine) Shutdown() {
 	}
 	wg.Wait()
 	_ = os.Remove(e.cfg.LedgerPath)
+}
+
+// SetDefaults 修改默认超时与没有 shebang 时使用的 shell（设置里改动后立即生效）。
+// timeout 为 0 时保持不变。
+func (e *Engine) SetDefaults(timeout time.Duration, shell string) {
+	e.cfgMu.Lock()
+	defer e.cfgMu.Unlock()
+	if timeout > 0 {
+		e.cfg.DefaultTimeout = timeout
+	}
+	e.cfg.Shell = shell
+}
+
+func (e *Engine) defaults() (time.Duration, string) {
+	e.cfgMu.Lock()
+	defer e.cfgMu.Unlock()
+	return e.cfg.DefaultTimeout, e.cfg.Shell
+}
+
+func (e *Engine) stepTimeout() time.Duration {
+	t, _ := e.defaults()
+	return t + 5*time.Second
 }
 
 // IsUser 报告来源是否代表用户的直接操作（自动化、恢复、场景内部的步骤不算）。
@@ -422,11 +449,11 @@ func withHomebrewPath(env []string) []string {
 }
 
 func (e *Engine) spec(sw *Switch, src Source, args ...string) runner.Spec {
-	timeout := e.cfg.DefaultTimeout
+	timeout, shell := e.defaults()
 	if m := e.cfg.Store.Meta(sw.ID); m.Timeout > 0 {
 		timeout = time.Duration(m.Timeout) * time.Second
 	}
-	return runner.Spec{Path: sw.Path, Args: args, Env: e.env(sw, src), Shell: e.cfg.Shell, Timeout: timeout}
+	return runner.Spec{Path: sw.Path, Args: args, Env: e.env(sw, src), Shell: shell, Timeout: timeout}
 }
 
 func (e *Engine) record(sw *Switch, action string, src Source, detail string, res runner.Result) store.Run {

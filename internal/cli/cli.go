@@ -164,10 +164,11 @@ func (e *Env) dispatch(cmd string, rest []string, jsonMode bool, flag func(strin
 		if contract.HasErrors(issues) {
 			return 1
 		}
+		method, path := "POST", "/v1/scripts"
 		if update {
-			return e.call("PUT", "/v1/switches/"+PathEscape(rest[0])+"/script", data)
+			method, path = "PUT", "/v1/switches/"+PathEscape(rest[0])+"/script"
 		}
-		return e.call("POST", "/v1/scripts", data)
+		return e.write(method, path, data, jsonMode)
 	case "rm":
 		if len(rest) == 0 {
 			return e.fail("usage: opentoggle rm <id>")
@@ -619,6 +620,34 @@ func (e *Env) scene(id, action string, jsonMode bool) exit {
 	}
 	if !res.Run.OK {
 		return e.fail("some steps failed")
+	}
+	return 0
+}
+
+// write 提交脚本。AI 来源且需要确认时服务端返回 202：打印说明，不当作失败。
+func (e *Env) write(method, path string, data []byte, jsonMode bool) exit {
+	code, body, err := e.Client.Do(method, path, data)
+	if err != nil {
+		return e.fail("%v", err)
+	}
+	if code >= 400 {
+		e.Err.Write(body)
+		fmt.Fprintln(e.Err)
+		return 1
+	}
+	if code == 202 && !jsonMode {
+		var res struct {
+			ChangeID string `json:"changeId"`
+			Message  string `json:"message"`
+		}
+		if json.Unmarshal(body, &res) == nil && res.ChangeID != "" {
+			fmt.Fprintf(e.Out, "pending approval (%s): %s\n", res.ChangeID, res.Message)
+			return 0
+		}
+	}
+	e.Out.Write(body)
+	if len(body) == 0 || body[len(body)-1] != '\n' {
+		fmt.Fprintln(e.Out)
 	}
 	return 0
 }

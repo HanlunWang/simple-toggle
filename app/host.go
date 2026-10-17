@@ -53,3 +53,8 @@ func expandHome(p string) string {
 	}
 	return p
 }
+
+func homeDir() string {
+	h, _ := os.UserHomeDir()
+	return h
+}

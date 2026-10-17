@@ -41,6 +41,11 @@ type Backend interface {
 	DeleteScene(id string) error
 	ToggleScene(id string, src engine.Source, detail string) (<-chan store.Run, error)
 	ActivateScene(id string, src engine.Source, detail string) (<-chan store.Run, error)
+
+	// AI 提交的待确认修改
+	Changes() []store.Change
+	ApproveChange(id string) (store.Change, error)
+	RejectChange(id string) (store.Change, error)
 }
 
 // Automation 是自动化规则与快捷键（*automation.Manager 实现它）。

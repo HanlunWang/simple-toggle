@@ -57,6 +57,10 @@ type sceneArgs struct {
 	Action string `json:"action,omitempty" jsonschema:"activate, restore, or toggle (default: activate, or restore when already active)"`
 }
 
+type changeArg struct {
+	ID string `json:"id" jsonschema:"Change id returned by opentoggle_write_script (e.g. chg-3)"`
+}
+
 type empty struct{}
 
 // Run 在 stdin / stdout 上运行 MCP 服务器，直到对端断开。
@@ -147,6 +151,11 @@ func NewServer() *sdk.Server {
 				q.Set("failed", "1")
 			}
 			return forward(req, "GET", "/v2/runs?"+q.Encode(), nil)
+		})
+	sdk.AddTool(s, &sdk.Tool{Name: "opentoggle_change_status",
+		Description: "Check a script change that is waiting for the user's approval (opentoggle_write_script returns its id when OpenToggle asks the user to confirm AI edits). Status is pending, approved, rejected or failed; approved changes are written to disk."},
+		func(ctx context.Context, req *sdk.CallToolRequest, in changeArg) (*sdk.CallToolResult, any, error) {
+			return forward(req, "GET", "/v2/changes/"+cli.PathEscape(in.ID), nil)
 		})
 	sdk.AddTool(s, &sdk.Tool{Name: "opentoggle_list_scenes",
 		Description: "List scenes (one-click groups of switches): id, name, steps (switch + on/off/run), whether it is active, and its shortcut."},

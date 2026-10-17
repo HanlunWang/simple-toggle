@@ -20,6 +20,7 @@ type fakeBackend struct {
 	scripts map[string]string // 工作台：脚本内容
 	runs    []store.Run
 	scenes  []engine.SceneView
+	changes []store.Change
 }
 
 func (f *fakeBackend) List() []engine.View {

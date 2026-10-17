@@ -229,3 +229,38 @@ func (a *fakeAuto) Reload()                         { a.calls = append(a.calls, 
 func (a *fakeAuto) ShortcutIssues() map[string]automation.ShortcutIssue {
 	return a.issues
 }
+
+// ───────── 待确认修改 ─────────
+
+func (f *fakeBackend) Changes() []store.Change {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]store.Change(nil), f.changes...)
+}
+
+func (f *fakeBackend) decide(id, status string) (store.Change, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.changes {
+		if f.changes[i].ID == id {
+			if f.changes[i].Status != "pending" {
+				return f.changes[i], engine.ErrChangeDecided
+			}
+			f.changes[i].Status = status
+			f.calls = append(f.calls, status+" "+id)
+			if status == "approved" {
+				id := f.changes[i].Switch
+				if id == "" {
+					id = "new.sh"
+				}
+				f.changes[i].Switch = id
+				f.setScriptLocked(id, f.changes[i].Content)
+			}
+			return f.changes[i], nil
+		}
+	}
+	return store.Change{}, engine.ErrNoChange
+}
+
+func (f *fakeBackend) ApproveChange(id string) (store.Change, error) { return f.decide(id, "approved") }
+func (f *fakeBackend) RejectChange(id string) (store.Change, error)  { return f.decide(id, "rejected") }

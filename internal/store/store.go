@@ -49,6 +49,7 @@ type state struct {
 	Settings   map[string]string            `json:"settings"`
 	Scenes     []Scene                      `json:"scenes,omitempty"`
 	Rules      []Rule                       `json:"automations,omitempty"`
+	Changes    []Change                     `json:"changes,omitempty"`
 	V1Imported bool                         `json:"v1Imported,omitempty"`
 }
 

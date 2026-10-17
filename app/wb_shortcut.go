@@ -55,18 +55,31 @@ func accelFor(mods ui.Modifiers, key ui.Key) (string, error) {
 	return automation.NormalizeShortcut(s + name)
 }
 
+// recorder 是快捷键录制的状态（工作台与设置窗口各有一个）。
+type recorder struct {
+	recording string            // 正在录制的那个输入
+	err       string            // 录到无效组合键的那个输入
+	recorded  map[string]string // 录到的快捷键，下一次构建时交给对应的输入
+}
+
 // shortcutField 显示并录制快捷键。issue 是这一项的冲突说明（空 = 没有问题）。
 // 返回新值与是否改变。
 func (w *workbench) shortcutField(c *ui.Context, key, value, issue string) (string, bool) {
-	pal := w.pal
+	return w.rec.field(c, w.pal, key, value, issue)
+}
+
+func (r *recorder) field(c *ui.Context, pal palette, key, value, issue string) (string, bool) {
+	if r.recorded == nil {
+		r.recorded = map[string]string{}
+	}
 	out, changed := value, false
 	// 按键在事件分发时处理（晚于上一次构建），结果放在 recorded 里，这次构建取出
-	if res, ok := w.recorded[key]; ok {
-		delete(w.recorded, key)
+	if res, ok := r.recorded[key]; ok {
+		delete(r.recorded, key)
 		out, changed = res, res != value
 		value = res
 	}
-	recording := w.recording == key
+	recording := r.recording == key
 	ui.Column(c.Key(key)).FillWidth().Gap(5).Children(func() {
 		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
 			b := ui.ButtonBase(c.Key("rec")).MinWidth(110).Height(26).Padding(0, 10).Radius(7).Border(1, pal.L3).
@@ -94,27 +107,27 @@ func (w *workbench) shortcutField(c *ui.Context, key, value, issue string) (stri
 					}
 					switch {
 					case ev.Key == ui.KeyEscape && ev.Mods == 0:
-						w.recording, w.recordErr = "", ""
+						r.recording, r.err = "", ""
 					case (ev.Key == ui.KeyBackspace || ev.Key == ui.KeyDelete) && ev.Mods == 0:
-						w.recording, w.recordErr = "", ""
-						w.recorded[key] = ""
+						r.recording, r.err = "", ""
+						r.recorded[key] = ""
 					default:
 						a, err := accelFor(ev.Mods, ev.Key)
 						if err != nil {
-							w.recordErr = key
+							r.err = key
 							return true
 						}
-						w.recording, w.recordErr = "", ""
-						w.recorded[key] = a
+						r.recording, r.err = "", ""
+						r.recorded[key] = a
 					}
 					return true
 				})
 			}
 			if b.Clicked() {
 				if recording {
-					w.recording = ""
+					r.recording = ""
 				} else {
-					w.recording, w.recordErr = key, ""
+					r.recording, r.err = key, ""
 				}
 			}
 			if value != "" && !recording {
@@ -124,7 +137,7 @@ func (w *workbench) shortcutField(c *ui.Context, key, value, issue string) (stri
 			}
 		})
 		switch {
-		case w.recordErr == key:
+		case r.err == key:
 			ui.Text(c, tr("sc_bad")).FontSize(11).TextColor(pal.Amber).Wrap()
 		case issue != "":
 			ui.Row(c).Gap(5).AlignItems(ui.Start).Children(func() {

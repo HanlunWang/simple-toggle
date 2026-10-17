@@ -274,7 +274,7 @@ func TestMCP(t *testing.T) {
 	}
 	for _, want := range []string{"opentoggle_list", "opentoggle_set_switch", "opentoggle_set_params", "opentoggle_set_enabled",
 		"opentoggle_get_script", "opentoggle_write_script", "opentoggle_validate", "opentoggle_delete",
-		"opentoggle_run_action", "opentoggle_get_runs", "opentoggle_list_scenes", "opentoggle_activate_scene", "opentoggle_list_automations"} {
+		"opentoggle_run_action", "opentoggle_get_runs", "opentoggle_list_scenes", "opentoggle_activate_scene", "opentoggle_list_automations", "opentoggle_change_status"} {
 		if !names[want] {
 			t.Errorf("missing tool %s", want)
 		}
@@ -315,7 +315,22 @@ func TestMCP(t *testing.T) {
 	if text, isErr := call("opentoggle_write_script", map[string]any{"content": "#!/bin/sh\necho no header\n"}); !isErr || !strings.Contains(text, "Missing required directive") {
 		t.Fatalf("write_script with errors: %v %s", isErr, text)
 	}
-	text, _ := call("opentoggle_get_runs", map[string]any{"limit": 5})
+	// AI 写脚本：先存成待确认变更，不写文件
+	text, isErr := call("opentoggle_write_script", map[string]any{"content": "#!/bin/sh\n# <switch.name> From AI\n# <switch.type> action\necho hi\n"})
+	if isErr || !strings.Contains(text, `"pending": true`) || !strings.Contains(text, "waiting for the user's approval") {
+		t.Fatalf("write_script should wait for approval: %v %s", isErr, text)
+	}
+	if _, err := os.Stat(filepath.Join(in.home, "switches", "from-ai.sh")); err == nil {
+		t.Fatal("AI script written before approval")
+	}
+	if text, isErr := call("opentoggle_change_status", map[string]any{"id": "chg-1"}); isErr || !strings.Contains(text, `"status": "pending"`) {
+		t.Fatalf("change_status: %s", text)
+	}
+	// 删除脚本默认不允许 AI 执行
+	if text, isErr := call("opentoggle_delete", map[string]any{"id": "lamp"}); !isErr || !strings.Contains(text, "do not allow AI agents to delete scripts") {
+		t.Fatalf("delete should be refused: %s", text)
+	}
+	text, _ = call("opentoggle_get_runs", map[string]any{"limit": 5})
 	var runs []map[string]any
 	if json.Unmarshal([]byte(text), &runs) != nil || len(runs) == 0 || runs[0]["source"] != "ai" || runs[0]["detail"] != "e2e-client" {
 		t.Fatalf("MCP provenance: %s", text)

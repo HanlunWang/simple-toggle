@@ -96,7 +96,7 @@ func (w *workbench) activity(c *ui.Context) {
 		}
 	})
 	if w.clearOpen {
-		if ui.AlertDialog(c.Key("clear-dialog"), &w.clearOpen, tr("act_clear_title"), tr("act_clear_msg"), tr("act_clear"), tr("cancel")) == 0 {
+		if ui.AlertDialog(c.Key("clear-dialog"), &w.clearOpen, tr("act_clear_title"), tr("act_clear_msg"), tr("cancel"), tr("act_clear")) == 1 {
 			_ = w.b.ClearRuns()
 			w.runsDirty = true
 		}

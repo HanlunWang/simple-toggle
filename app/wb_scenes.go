@@ -165,7 +165,7 @@ func (w *workbench) sceneEditor(c *ui.Context) {
 		})
 	})
 	if w.deleteOpen {
-		if ui.AlertDialog(c.Key("sc-del-dialog"), &w.deleteOpen, fmt.Sprintf(tr("scene_del_title"), sc.Name), tr("scene_del_msg"), tr("delete"), tr("cancel")) == 0 {
+		if ui.AlertDialog(c.Key("sc-del-dialog"), &w.deleteOpen, fmt.Sprintf(tr("scene_del_title"), sc.Name), tr("scene_del_msg"), tr("cancel"), tr("delete")) == 1 {
 			_ = w.b.DeleteScene(sc.ID)
 			w.selScene = ""
 			w.dirty = true

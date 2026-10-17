@@ -171,3 +171,38 @@ func TestScenesAndRules(t *testing.T) {
 		t.Fatal("delete")
 	}
 }
+
+func TestExportImportReset(t *testing.T) {
+	a, _ := Open(t.TempDir())
+	a.SetSetting("ui.theme", "dark")
+	a.SetSetting("onboarded", "true")
+	a.SetHidden("x.sh", true)
+	a.SetParam("x.sh", "mode", "b")
+	a.SetMeta("x.sh", Meta{Group: "Work"})
+	a.PutScene(Scene{ID: "s", Name: "S"})
+	a.PutRule(Rule{ID: "r", Enabled: true, LastFired: time.Now()})
+	x := a.ExportState()
+	if x.Settings["onboarded"] != "" || x.Settings["ui.theme"] != "dark" || x.Format != ExportFormat {
+		t.Fatalf("export settings %v", x.Settings)
+	}
+	b, _ := Open(t.TempDir())
+	b.PutScene(Scene{ID: "s", Name: "Old"})
+	b.PutScene(Scene{ID: "keep", Name: "Keep"})
+	if err := b.ImportState(x); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := b.Param("x.sh", "mode"); v != "b" || !b.Hidden("x.sh") || b.Meta("x.sh").Group != "Work" || b.Setting("ui.theme") != "dark" {
+		t.Fatal("import state")
+	}
+	if scs := b.Scenes(); len(scs) != 2 || scs[0].Name != "S" {
+		t.Fatalf("scenes merged: %+v", scs)
+	}
+	if r, _ := b.Rule("r"); !r.LastFired.IsZero() {
+		t.Fatal("last fired imported")
+	}
+	b.SetSetting("onboarded", "true")
+	b.ResetSettings()
+	if b.Setting("ui.theme") != "" || b.Setting("onboarded") != "true" {
+		t.Fatal("reset")
+	}
+}

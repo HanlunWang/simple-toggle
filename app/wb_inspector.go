@@ -546,6 +546,28 @@ func (w *workbench) behaviorView(c *ui.Context, v engine.View) {
 			}
 		})
 	}
+	row(tr("b_notify"), func() {
+		values := []string{"", "never", "fail", "always"}
+		labels := []string{tr("n_default"), tr("n_never"), tr("n_fail"), tr("n_always")}
+		cur := labels[0]
+		for i, val := range values {
+			if val == v.Meta.Notify {
+				cur = labels[i]
+			}
+		}
+		sel := cur
+		ui.Select(c.Key("b-notify"), &sel, labels).Width(130).Label(tr("b_notify"))
+		if sel != cur {
+			for i, l := range labels {
+				if l == sel {
+					m := v.Meta
+					m.Notify = values[i]
+					_ = w.b.SetMeta(v.ID, m)
+					w.dirty = true
+				}
+			}
+		}
+	})
 	row(tr("b_hidden"), func() {
 		hidden := v.Hidden
 		ui.Switch(c.Key("b-hidden"), &hidden).Label(tr("b_hidden"))

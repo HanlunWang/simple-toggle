@@ -23,6 +23,7 @@ import (
 const (
 	SettingPausedUntil = "automation.pausedUntil" // 空 = 未暂停；"forever"；或 RFC 3339 时间
 	SettingConflict    = "automation.conflict"    // "manual"（默认）| "rule"
+	SettingEnabled     = "automation.enabled"     // "false" 时规则不触发（开关与场景的快捷键照常）
 
 	SuspendFlapping = "flapping" // store.Rule.Suspended：规则来回切换同一个开关
 
@@ -224,9 +225,26 @@ func (m *Manager) loop() {
 
 // ───────── 规则与绑定 ─────────
 
+// Enabled 报告自动化总开关是否打开。
+func (m *Manager) Enabled() bool { return m.cfg.Store.Setting(SettingEnabled) != "false" }
+
+// SetEnabled 打开或关闭自动化总开关。
+func (m *Manager) SetEnabled(on bool) error {
+	v := "true"
+	if !on {
+		v = "false"
+	}
+	err := m.cfg.Store.SetSetting(SettingEnabled, v)
+	m.Reload()
+	return err
+}
+
 // apply 重新读取规则，按需要注册快捷键与文件监听。
 func (m *Manager) apply() {
 	rules := m.cfg.Store.Rules()
+	if !m.Enabled() {
+		rules = nil // 总开关关闭：规则不监听、不注册
+	}
 	var binds []binding
 	for _, v := range m.cfg.Engine.List() {
 		if v.Meta.Shortcut == "" {

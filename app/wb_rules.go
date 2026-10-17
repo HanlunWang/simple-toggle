@@ -243,7 +243,7 @@ func (w *workbench) ruleEditor(c *ui.Context) {
 		})
 	})
 	if w.deleteOpen {
-		if ui.AlertDialog(c.Key("rl-del-dialog"), &w.deleteOpen, tr("rule_del_title"), tr("rule_del_msg"), tr("delete"), tr("cancel")) == 0 {
+		if ui.AlertDialog(c.Key("rl-del-dialog"), &w.deleteOpen, tr("rule_del_title"), tr("rule_del_msg"), tr("cancel"), tr("delete")) == 1 {
 			_ = w.auto.DeleteRule(r.ID)
 			delete(w.ruleDraft, r.ID)
 			w.selRule = ""

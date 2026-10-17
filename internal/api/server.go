@@ -191,6 +191,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "missing or invalid token; read it from ~/.config/open-toggle/api.json (the opentoggle CLI and MCP server do this automatically)")
 		return
 	}
+	if !s.checkAI(req) {
+		return
+	}
 	switch {
 	case len(parts) >= 1 && parts[0] == "v1":
 		s.v1(req)
@@ -302,6 +305,8 @@ func (s *Server) v2(q *request) {
 		s.events(q)
 	case len(p) >= 2 && p[1] == "scenes":
 		s.scenes(q)
+	case len(p) >= 2 && p[1] == "changes":
+		s.changes(q)
 	case len(p) >= 2 && p[1] == "automations":
 		s.automations(q)
 	case len(p) == 3 && p[1] == "switches":
@@ -400,6 +405,8 @@ func (s *Server) switchAction(q *request, rawID, action string, v2 bool) {
 		q.w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		q.w.WriteHeader(200)
 		_, _ = io.WriteString(q.w, content)
+	case m == http.MethodPut && action == "script" && s.needsApproval(q):
+		s.propose(q, id)
 	case m == http.MethodPut && action == "script":
 		issues, err := s.eng.UpdateScript(id, string(q.body), q.source)
 		var lint *engine.LintError
@@ -420,6 +427,10 @@ func (s *Server) switchAction(q *request, rawID, action string, v2 bool) {
 }
 
 func (s *Server) createScript(q *request) {
+	if s.needsApproval(q) {
+		s.propose(q, "")
+		return
+	}
 	id, issues, err := s.eng.CreateScript(string(q.body))
 	var lint *engine.LintError
 	if errors.As(err, &lint) {
@@ -591,3 +602,6 @@ func writeJSON(w http.ResponseWriter, status int, v any, pretty bool) {
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg}, false)
 }
+
+// Port 返回监听的端口。
+func (s *Server) Port() int { return s.opts.Port }

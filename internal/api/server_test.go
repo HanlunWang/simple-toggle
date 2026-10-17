@@ -262,3 +262,50 @@ func TestScenesAPI(t *testing.T) {
 		t.Fatalf("automations: %d %s", code, body)
 	}
 }
+
+func TestAIPermissionsAndApproval(t *testing.T) {
+	e := newEnv(t)
+	st := e.s.opts.Store
+	agent := "mcp/claude-code"
+	// 默认：AI 可以读、开关、写（需确认），不能删
+	if code, _ := e.do("GET", "/v1/switches", "", false, agent); code != 200 {
+		t.Fatalf("read: %d", code)
+	}
+	if code, body := e.do("DELETE", "/v1/switches/lamp", "", true, agent); code != 403 || !strings.Contains(body, "delete scripts") {
+		t.Fatalf("delete: %d %s", code, body)
+	}
+	script := "#!/bin/sh\n# <switch.name> Lamp\n# <switch.param> key=mode type=select label=Mode default=a options=\"A=a|B=b\"\ncase \"$1\" in status) echo off ;; esac\n"
+	code, body := e.do("PUT", "/v1/switches/lamp/script", script, true, agent)
+	if code != 202 || !strings.Contains(body, `"changeId": "chg-1"`) {
+		t.Fatalf("write should wait: %d %s", code, body)
+	}
+	if code, body := e.do("GET", "/v2/changes/chg-1", "", false, agent); code != 200 || !strings.Contains(body, `"status": "pending"`) {
+		t.Fatalf("status: %d %s", code, body)
+	}
+	if code, _ := e.do("POST", "/v2/changes/chg-1/approve", "", true, agent); code != 404 {
+		t.Fatalf("approval must not be possible over the API: %d", code)
+	}
+	// 用户（非 AI）写脚本不需要确认
+	if code, _ := e.do("PUT", "/v1/switches/lamp/script", script, true, "cli"); code != 200 {
+		t.Fatalf("user write: %d", code)
+	}
+	// 关掉确认：AI 直接写；关掉开关权限：拒绝
+	st.SetSetting(SettingConfirm, "false")
+	if code, _ := e.do("PUT", "/v1/switches/lamp/script", script, true, agent); code != 200 {
+		t.Fatalf("write without confirmation: %d", code)
+	}
+	st.SetSetting("ai.toggle", "false")
+	if code, body := e.do("POST", "/v1/switches/lamp/on", "", true, agent); code != 403 || !strings.Contains(body, "turn switches on or off") {
+		t.Fatalf("toggle refused: %d %s", code, body)
+	}
+	if code, _ := e.do("POST", "/v1/switches/lamp/on", "", true, "cli"); code != 200 {
+		t.Fatalf("user toggle: %d", code)
+	}
+	st.SetSetting("ai.read", "false")
+	if code, _ := e.do("GET", "/v1/switches", "", false, agent); code != 403 {
+		t.Fatalf("read refused: %d", code)
+	}
+	if code, _ := e.do("POST", "/v1/validate", "#!/bin/sh\n", false, agent); code != 200 {
+		t.Fatalf("validate needs no permission: %d", code)
+	}
+}

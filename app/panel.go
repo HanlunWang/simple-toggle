@@ -45,6 +45,7 @@ type panel struct {
 	// 外部动作（测试里可留空）
 	openScripts   func()
 	openWorkbench func(id string)
+	openSettings  func()
 	requestAX     func()
 	quit          func()
 	resize        func(height float32)
@@ -74,7 +75,7 @@ func (p *panel) load() {
 	if !p.dirty && !(countdown && time.Since(p.loadedAt) >= 900*time.Millisecond) {
 		return
 	}
-	p.views = p.b.List()
+	p.views = sortedViews(p.b.List())
 	p.scenes = p.b.Scenes()
 	p.loadedAt = time.Now()
 	p.dirty = false
@@ -872,6 +873,9 @@ func (p *panel) footer(c *ui.Context) {
 		ui.Spacer(c)
 		if p.iconButton(c, "btn-folder", "folder", tr("open_scripts"), false).Clicked() && p.openScripts != nil {
 			p.openScripts()
+		}
+		if p.iconButton(c, "btn-settings", "settings", tr("settings"), false).Clicked() && p.openSettings != nil {
+			p.openSettings()
 		}
 		if p.iconButton(c, "btn-refresh", "rotate-cw", tr("refresh"), false).Clicked() {
 			p.b.Refresh()

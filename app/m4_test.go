@@ -84,7 +84,7 @@ func TestSceneEditor(t *testing.T) {
 	tt.Key(ui.Ctrl|ui.Alt, ui.Key1)
 	tt.Frame()
 	if got := b.scenes[0].Shortcut; got != "ctrl+alt+1" {
-		t.Fatalf("shortcut %q (recording=%q)", got, w.recording)
+		t.Fatalf("shortcut %q (recording=%q)", got, w.rec.recording)
 	}
 	if !strings.Contains(strings.Join(a.calls, ","), "reload") {
 		t.Fatal("automation not reloaded after the shortcut changed")

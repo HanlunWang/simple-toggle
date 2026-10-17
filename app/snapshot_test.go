@@ -4,13 +4,14 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
-
-	"github.com/egoist/mygo/ui"
+	"time"
 
 	"github.com/HanlunWang/open-toggle/internal/automation"
 	"github.com/HanlunWang/open-toggle/internal/engine"
 	"github.com/HanlunWang/open-toggle/internal/store"
+	"github.com/egoist/mygo/ui"
 )
 
 // TestSnapshots 把工作台的几个状态渲染成 PNG，供人工核对视觉（默认跳过）：
@@ -122,4 +123,73 @@ func replaceOnce(s, old, new string) string {
 		}
 	}
 	return s
+}
+
+// TestSnapshotsM5 渲染设置、引导与待确认修改（默认跳过）。
+func TestSnapshotsM5(t *testing.T) {
+	dir := os.Getenv("OT_SNAPSHOT_DIR")
+	if dir == "" {
+		t.Skip("set OT_SNAPSHOT_DIR to render snapshots")
+	}
+	save := func(tt *ui.Tester, name string) {
+		f, err := os.Create(filepath.Join(dir, name+".png"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		png.Encode(f, tt.Image())
+	}
+	for _, dark := range []bool{false, true} {
+		suffix := "-light"
+		if dark {
+			suffix = "-dark"
+		}
+		h, _ := newFakeSettings(sampleViews())
+		s := newSettingsWin(h)
+		tt := ui.NewTester(s.render, 780, 600)
+		tt.SetDark(dark)
+		for _, tab := range []string{"general", "appearance", "menubar", "ai", "privacy", "advanced"} {
+			s.tab = tab
+			tt.Frame()
+			save(tt, "settings-"+tab+suffix)
+		}
+		s.tab = "ai"
+		p, _ := h.plan("cursor")
+		s.plan, s.planOpen = &p, true
+		tt.Frame()
+		save(tt, "settings-plan"+suffix)
+
+		o := newOnboarding(&onboardingHost{
+			installed: func(f string) bool { return f == "keep-awake.sh" || f == "dark-mode.sh" },
+			install:   func(string, string) error { return nil },
+			prefs:     func() Prefs { return Prefs{Theme: "system", Accent: AccentInk, Layout: "list", MenubarStyle: trayPill} },
+			setPref:   func(string, string) {},
+			clients:   h.clients, plan: h.plan, apply: h.apply,
+			panelShortcut: func() string { return "alt+space" },
+			finish:        func(bool) {},
+		})
+		ot := ui.NewTester(o.render, 840, 580)
+		ot.SetDark(dark)
+		for step := 0; step < onboardingSteps; step++ {
+			o.step = step
+			if step == 1 {
+				o.picked["pomodoro.sh"] = true
+			}
+			ot.Frame()
+			save(ot, "onboarding-"+itoa(step+1)+suffix)
+		}
+
+		w, b, wt, _ := newTestWorkbench(t)
+		wt.SetDark(dark)
+		b.mu.Lock()
+		b.changes = []store.Change{{ID: "chg-1", Kind: "update", Switch: "flush.sh", Name: "Flush DNS", Previous: flushScript,
+			Content: strings.Replace(flushScript, "echo flushed", "dscacheutil -flushcache\nkillall -HUP mDNSResponder\necho flushed", 1),
+			Source:  "ai", Detail: "mcp/claude-code", Status: "pending", Created: time.Now()}}
+		b.mu.Unlock()
+		w.open(secChanges, "")
+		w.invalidate()
+		wt.Frame()
+		wt.Frame()
+		save(wt, "changes"+suffix)
+	}
 }

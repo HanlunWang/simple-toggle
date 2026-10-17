@@ -33,11 +33,8 @@ func Run() error {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return nil // 已有实例在运行；它会收到第二个实例的启动
 	}
-	mygo.App.OnWindowAllClosed(func() {}) // 面板是唯一的窗口，关掉它 app 照常运行
-	// 界面语言跟随系统的首选语言（App.Locale 返回的是 app 已翻译的语言，M5 接入 i18n 前恒为英文）
-	if langs := mygo.App.PreferredLanguages(); len(langs) > 0 {
-		setLanguage(langs[0])
-	}
+	mygo.App.OnWindowAllClosed(func() {}) // 关掉所有窗口后 app 照常在菜单栏运行
+	mygo.App.SetLanguages("en", "zh-Hans")
 
 	st, err := store.Open(paths.Data())
 	if err != nil {
@@ -51,37 +48,51 @@ func Run() error {
 			log.Println("v1 import:", err)
 		}
 	}
+	// 语言：设置里选了就用它，否则跟随系统（mygo 自带的文案也随之切换）
+	if lang := st.Setting(keyLanguage); lang != "" {
+		mygo.App.SetLocale(lang)
+	}
+	setLanguage(mygo.App.Locale())
 	prefs := loadPrefs(st)
-	switch prefs.Theme {
-	case "light":
-		mygo.Theme.SetSource(mygo.ThemeLight)
-	case "dark":
-		mygo.Theme.SetSource(mygo.ThemeDark)
+	applyTheme(prefs.Theme)
+	if days, err := strconv.Atoi(st.Setting(keyRetention)); err == nil && days > 0 {
+		_ = st.SetRetention(time.Duration(days) * 24 * time.Hour)
 	}
 
 	exe, _ := os.Executable()
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
+	scriptsDir := paths.Scripts()
+	if dir := st.Setting(keyScriptsDir); dir != "" && os.Getenv("OPENTOGGLE_HOME") == "" {
+		scriptsDir = dir
+	}
+	timeout, shell := engineDefaults(st)
 	eng := engine.New(engine.Config{
-		ScriptsDir: paths.Scripts(), LedgerPath: paths.Ledger(), Bin: exe, Store: st,
+		ScriptsDir: scriptsDir, LedgerPath: paths.Ledger(), Bin: exe, Store: st,
 		Trash: darwin.Trash, WatchInterval: 2 * time.Second,
+		DefaultTimeout: timeout, Shell: shell, ExtraEnv: func() []string { return globalEnv(st) },
+		NoRestore: st.Setting(keyRestore) == "false",
 	})
 	if err := eng.Seed(presets.All()); err != nil {
 		log.Println("seed:", err)
 	}
 	srv := api.New(eng, api.Options{Port: paths.Port(), DiscoveryPath: paths.Discovery(), Version: version.Version, Store: st})
 	// API 先于状态恢复启动：恢复拉起的 daemon 可能立刻调用 `opentoggle press`
-	apiErr := srv.Start()
-	if apiErr != nil {
-		log.Println(apiErr)
+	var apiErr error
+	apiOn := st.Setting(keyAPI) != "false"
+	if apiOn {
+		if apiErr = srv.Start(); apiErr != nil {
+			log.Println(apiErr)
+			apiOn = false
+		}
 	}
 	if err := eng.Start(); err != nil {
 		srv.Close()
 		return err
 	}
 
-	c := &controller{eng: eng, srv: srv, st: st, prefs: prefs, apiErr: apiErr, extras: map[string]*extraItem{}}
+	c := &controller{eng: eng, srv: srv, st: st, prefs: prefs, apiErr: apiErr, apiOn: apiOn, exe: exe, extras: map[string]*extraItem{}}
 	c.auto = automation.New(automation.Config{
 		Engine: eng, Store: st, Host: appHost{},
 		Describe:   func(r store.Rule) string { return ruleText(r, c.targetName) },
@@ -89,6 +100,7 @@ func Run() error {
 	})
 	mygo.App.WhenReady(c.ready)
 	mygo.App.OnSecondInstance(func([]string, string) { c.togglePanel() })
+	mygo.App.OnOpenURL(func(u string) { mygo.RunOnMain(func() { c.handleDeepLink(u) }) })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { c.shutdown() })
 	return mygo.App.Run()
 }
@@ -105,6 +117,8 @@ type controller struct {
 	st     *store.Store
 	prefs  Prefs
 	apiErr error
+	apiOn  bool
+	exe    string
 
 	tray     *mygo.Tray
 	flyout   *mygo.Window
@@ -118,6 +132,15 @@ type controller struct {
 
 	appsOnce sync.Once
 	apps     []appInfo
+
+	// 设置、引导与其他窗口
+	st_            *settingsWin
+	stWin          *mygo.Window
+	obWin          *mygo.Window
+	windows        int
+	appShortcuts   []string
+	appShortcutErr map[string]string
+	notified       map[string]bool
 
 	wb           *workbench
 	wbWin        *mygo.Window
@@ -134,6 +157,7 @@ func (c *controller) ready() {
 	c.panel = newPanel(c.eng, c.prefs)
 	c.panel.openScripts = func() { _ = mygo.Shell.OpenPath(c.eng.ScriptsDir()) }
 	c.panel.openWorkbench = func(id string) { c.openWorkbench(secSwitches, id) }
+	c.panel.openSettings = func() { c.openSettings("") }
 	c.panel.quit = mygo.App.Quit
 	c.panel.axTrusted = darwin.AccessibilityTrusted
 	c.panel.reduceTransparency = func() bool { return mygo.Theme.Preferences().ReduceTransparency }
@@ -165,6 +189,27 @@ func (c *controller) ready() {
 	}
 
 	c.startAutomation()
+	c.notified = map[string]bool{}
+	c.registerAppShortcuts()
+	mygo.App.OnLocaleChanged(func(loc string) {
+		setLanguage(loc)
+		c.redrawAll()
+		c.titleKey = "-"
+		c.syncMenubar()
+	})
+	// 第一次启动显示引导（OPENTOGGLE_SKIP_ONBOARDING=1 跳过，OPENTOGGLE_SHOW_ONBOARDING=1 强制显示）
+	if (c.st.Setting(keyOnboarded) != "true" && os.Getenv("OPENTOGGLE_SKIP_ONBOARDING") != "1") || os.Getenv("OPENTOGGLE_SHOW_ONBOARDING") == "1" {
+		go func() {
+			time.Sleep(800 * time.Millisecond)
+			mygo.RunOnMain(c.openOnboarding)
+		}()
+	}
+	if tab := os.Getenv("OPENTOGGLE_SHOW_SETTINGS"); tab != "" {
+		go func() {
+			time.Sleep(1200 * time.Millisecond)
+			mygo.RunOnMain(func() { c.openSettings(tab) })
+		}()
+	}
 
 	events, cancel := c.eng.Subscribe()
 	go func() {
@@ -183,11 +228,22 @@ func (c *controller) ready() {
 					c.panel.invalidate()
 					c.redrawPanel()
 					c.syncMenubar()
+					reload := false
 					for _, e := range batch {
-						if e.Kind == engine.EventScene || e.Kind == engine.EventReloaded {
-							c.auto.Reload() // 场景的快捷键或开关列表变了
-							break
+						switch e.Kind {
+						case engine.EventScene, engine.EventReloaded:
+							reload = true // 场景的快捷键或开关列表变了
+						case engine.EventRun:
+							c.notifyRun(e.Run)
+						case engine.EventChange:
+							c.notifyChange(e.Switch)
 						}
+					}
+					if reload {
+						c.auto.Reload()
+					}
+					if c.stWin != nil {
+						c.stWin.Invalidate()
 					}
 					if c.wb != nil {
 						for _, e := range batch {
@@ -294,6 +350,7 @@ func (c *controller) contextMenu() {
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		{Label: tr("open_panel"), Click: func(*mygo.MenuItem, *mygo.Window) { c.togglePanel() }},
 		{Label: tr("open_workbench"), Click: func(*mygo.MenuItem, *mygo.Window) { c.openWorkbench("", "") }},
+		{Label: tr("open_settings"), Click: func(*mygo.MenuItem, *mygo.Window) { c.openSettings("") }},
 		{Label: tr("open_scripts"), Click: func(*mygo.MenuItem, *mygo.Window) { _ = mygo.Shell.OpenPath(c.eng.ScriptsDir()) }},
 		{Label: tr("refresh"), Click: func(*mygo.MenuItem, *mygo.Window) { c.eng.Refresh() }},
 		mygo.Separator(),
@@ -341,7 +398,8 @@ func (c *controller) syncMenubar() {
 	}
 
 	// 主图标
-	iconKey := fmt.Sprintf("%s|%d|%v|%v", c.prefs.MenubarStyle, min(onCount, 3), busy && c.phase, onCount > 0)
+	blink := busy && c.phase && c.prefs.BusyAnim // 运行中动画可以在设置里关掉
+	iconKey := fmt.Sprintf("%s|%d|%v|%v", c.prefs.MenubarStyle, min(onCount, 3), blink, onCount > 0)
 	title := ""
 	if replace != nil {
 		kind, val := contract.ResolveIcon(replace.MenuBar.Icon)
@@ -361,7 +419,7 @@ func (c *controller) syncMenubar() {
 		}
 	} else {
 		if iconKey != c.trayKey {
-			_ = c.tray.SetIcon(trayIconPNG(c.prefs.MenubarStyle, onCount, busy && c.phase), true)
+			_ = c.tray.SetIcon(trayIconPNG(c.prefs.MenubarStyle, onCount, blink), true)
 		}
 		switch {
 		case c.prefs.MenubarExtra == "count" && onCount > 0:
@@ -421,7 +479,7 @@ func (c *controller) syncMenubar() {
 		}
 	}
 
-	c.setTicking(countdownSec != nil || busy || anyCountdown(wantExtras) || (replace != nil && replace.Remaining != nil))
+	c.setTicking(countdownSec != nil || (busy && c.prefs.BusyAnim) || anyCountdown(wantExtras) || (replace != nil && replace.Remaining != nil))
 }
 
 func anyCountdown(m map[string]engine.View) bool {
@@ -536,11 +594,13 @@ func (c *controller) openWorkbench(section, item string) {
 				}
 			})
 		}
-		c.wb.openPath = func(path string) { _ = exec.Command("/usr/bin/open", "-t", path).Start() }
+		c.wb.openPath = c.openInEditor
 		c.wb.reveal = func(path string) { _ = exec.Command("/usr/bin/open", "-R", path).Start() }
 		c.wb.reduceTransparency = func() bool { return mygo.Theme.Preferences().ReduceTransparency }
 		c.wb.exportRuns = c.exportRuns
 		c.wb.auto = c.auto
+		c.wb.revealDir = func(p string) { _ = mygo.Shell.OpenPath(p) }
+		c.wb.openSettings = func() { c.openSettings("") }
 		c.wb.installedApps = c.installedApps
 		c.wb.network = currentNetwork
 		c.wb.pickPath = func(done func(string)) {
@@ -561,6 +621,7 @@ func (c *controller) openWorkbench(section, item string) {
 			}
 		}
 	}
+	c.wb.prefs = c.prefs
 	c.wb.open(section, item)
 	c.wb.invalidate()
 	if c.wbWin != nil {
@@ -570,23 +631,7 @@ func (c *controller) openWorkbench(section, item string) {
 		c.wbWin.Invalidate()
 		return
 	}
-	mygo.App.SetActivationPolicy(mygo.ActivationPolicyRegular)
-	mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu},
-		{Label: tr("menu_file"), Submenu: []*mygo.MenuItem{
-			{Label: tr("save"), Accelerator: "CmdOrCtrl+S", Click: func(*mygo.MenuItem, *mygo.Window) {
-				if c.wb != nil {
-					c.wb.saveCurrent()
-					if c.wbWin != nil {
-						c.wbWin.Invalidate()
-					}
-				}
-			}},
-			mygo.Separator(),
-			{Role: mygo.RoleClose},
-		}},
-		{Role: mygo.RoleEditMenu}, {Role: mygo.RoleWindowMenu},
-	}))
+	c.windowOpened()
 	win := mygo.NewWindow(mygo.WindowOptions{
 		Title: "OpenToggle " + tr("workbench"), Width: 1180, Height: 760, MinWidth: 860, MinHeight: 560,
 		TitleBarStyle: mygo.TitleBarHidden, Vibrancy: mygo.VibrancySidebar, StateKey: "workbench",
@@ -605,7 +650,7 @@ func (c *controller) openWorkbench(section, item string) {
 		if c.wbWin == win {
 			c.wbWin = nil
 			c.eng.PanelVisible(false)
-			mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
+			c.windowClosed()
 		}
 	})
 	mygo.App.Focus()

@@ -372,6 +372,11 @@ func (w *workbench) switchEditor(c *ui.Context) {
 			th := editor.DefaultTheme(c.Theme())
 			th.Background = pal.BG
 			d.st.Theme = th
+			d.st.Font = ui.Font{Size: w.prefs.EditorFontSize}
+			d.st.LineNumbers = editor.LineNumbersOn
+			if !w.prefs.LineNumbers {
+				d.st.LineNumbers = editor.LineNumbersOff
+			}
 			editor.View(c.Key("editor-"+d.id), d.st).Grow(1).FillWidth().MinHeight(0)
 			w.bottomPanel(c, d)
 		})
@@ -487,8 +492,8 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 	})
 	if w.deleteOpen {
 		name := d.header.Name
-		switch ui.AlertDialog(c.Key("delete-dialog"), &w.deleteOpen, fmt.Sprintf(tr("delete_title"), name), tr("delete_msg"), tr("delete"), tr("cancel")) {
-		case 0:
+		switch ui.AlertDialog(c.Key("delete-dialog"), &w.deleteOpen, fmt.Sprintf(tr("delete_title"), name), tr("delete_msg"), tr("cancel"), tr("delete")) {
+		case 1:
 			w.remove(d.id)
 		}
 	}

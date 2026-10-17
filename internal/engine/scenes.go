@@ -195,7 +195,7 @@ func (e *Engine) runStep(sc store.Scene, step store.SceneStep, st *sceneState, s
 				return fmt.Sprintf("✗ %s: exit %d", label, rec.ExitCode), false
 			}
 			return "✓ " + label, true
-		case <-time.After(e.cfg.DefaultTimeout + 5*time.Second):
+		case <-time.After(e.stepTimeout()):
 			return "✗ " + label + ": timed out", false
 		}
 	}
@@ -215,7 +215,7 @@ func (e *Engine) runStep(sc store.Scene, step store.SceneStep, st *sceneState, s
 	if err != nil {
 		return "✗ " + label + ": " + err.Error(), false
 	}
-	if !Wait(done, e.cfg.DefaultTimeout+5*time.Second) {
+	if !Wait(done, e.stepTimeout()) {
 		return "✗ " + label + ": timed out", false
 	}
 	if v, _ := e.Get(sw.ID); (v.State == On) != want {
@@ -261,7 +261,7 @@ func (e *Engine) RestoreScene(id string, src Source, detail string) (<-chan stor
 					continue
 				}
 				done, err := e.SetSwitch(id, was, Scene, sv.Name)
-				if err != nil || !Wait(done, e.cfg.DefaultTimeout+5*time.Second) {
+				if err != nil || !Wait(done, e.stepTimeout()) {
 					lines = append(lines, "✗ "+label)
 					ok = false
 					continue
