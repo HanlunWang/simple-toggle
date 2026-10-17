@@ -117,7 +117,7 @@ func (c *controller) setSetting(key, value string) {
 	case strings.HasPrefix(key, "ui."):
 		c.applyPrefs()
 	case key == keyLanguage:
-		mygo.App.SetLocale(value) // OnLocaleChanged 里切换文案
+		mygo.App.SetLocale(validLanguage(value)) // OnLocaleChanged 里切换文案
 	case key == keyTimeout || key == keyShell:
 		c.eng.SetDefaults(engineDefaults(c.st))
 	case key == keyRetention:
@@ -332,10 +332,13 @@ func (c *controller) integrationEnv() integrations.Env {
 	return integrations.Default(bin)
 }
 
-// skillSource 是随 app 发布的 skill 目录（OPENTOGGLE_SKILL_DIR 可覆盖，开发时指向仓库）。
+// skillSource 是随 app 发布的 skill 目录（mygo.json 的 resources 打进 Contents/Resources/skills；OPENTOGGLE_SKILL_DIR 可覆盖）。
 func (c *controller) skillSource() string {
 	if d := os.Getenv("OPENTOGGLE_SKILL_DIR"); d != "" {
 		return d
+	}
+	if dir, err := mygo.App.Path(mygo.PathResources); err == nil {
+		return filepath.Join(dir, "skills", "opentoggle")
 	}
 	return filepath.Join(filepath.Dir(c.exe), "..", "Resources", "skills", "opentoggle")
 }
@@ -403,7 +406,7 @@ func (c *controller) importConfig(win *mygo.Window, done func(int, int, int, err
 		}
 		err = c.st.ImportState(x)
 		mygo.RunOnMain(func() {
-			if lang := c.st.Setting(keyLanguage); lang != "" {
+			if lang := validLanguage(c.st.Setting(keyLanguage)); lang != "" {
 				mygo.App.SetLocale(lang)
 			}
 			c.eng.SetDefaults(engineDefaults(c.st))
@@ -632,4 +635,14 @@ func (c *controller) openOnboarding() {
 		}
 	})
 	mygo.App.Focus()
+}
+
+// validLanguage 只放行 app 支持的语言；其他值（例如 v1 的 "system"、导入文件里的任意字符串）
+// 视为跟随系统。SetLocale 遇到不是语言代码的值会 panic。
+func validLanguage(v string) string {
+	switch v {
+	case "zh-Hans", "en":
+		return v
+	}
+	return ""
 }

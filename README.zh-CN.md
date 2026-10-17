@@ -1,238 +1,182 @@
 <p align="center">
-  <img src="Assets/icon-1024.png" width="140" alt="OpenToggle 图标">
+  <img src="resources/icon.png" width="140" alt="OpenToggle 图标">
 </p>
 
 <h1 align="center">OpenToggle</h1>
 
-<p align="center"><b>把任何脚本变成 macOS 菜单栏里的受管开关。</b></p>
+<p align="center"><b>把任何脚本变成 macOS 菜单栏里受管理的开关。</b></p>
 
 <p align="center"><a href="README.md">English</a> | 简体中文</p>
 
-OpenToggle 把你的每个自动化脚本渲染成菜单栏中的一等公民开关——名称、状态灯、Toggle。开 = 启动自动化，关 = 停止，状态跨重启保持。脚本可用任何语言编写，声明几行元数据指令，进程生命周期、状态轮询、参数 UI 与持久化全部由 OpenToggle 接管。
+OpenToggle 把你的每个自动化脚本变成菜单栏里的一个控件：开关、常驻进程，或者按钮。脚本开头几行注释描述它，其余交给 OpenToggle：进程生命周期、状态轮询、参数界面、状态保存、场景、自动化、快捷键，以及给 AI 用的完整本地接口。
 
-## 为什么做这个
+## 为什么
 
-macOS 上的日常自动化——保持亮屏、防挂机、切代理、显示隐藏文件——传统上每个都要装一个独立小工具，菜单栏一堆图标。脚本转菜单栏的工具已经存在（SwiftBar、xbar、Hammerspoon），但它们的模型是「脚本 → 打印输出 → 显示」，都没有一等公民的**开关抽象**：受管的开/关语义、进程生命周期、状态持久化，每个插件都得手写一遍。
+日常的 macOS 自动化——让屏幕保持常亮、切换代理、显示隐藏文件、清空 DNS 缓存——传统做法是每样装一个单一用途的小工具，菜单栏越来越挤。也有把脚本放进菜单栏的工具（SwiftBar、xbar、Hammerspoon），但它们的模型是「脚本 → 打印输出 → 显示」：开关语义、进程管理和状态保存都要每个插件自己实现。
 
-OpenToggle 的模型是「脚本 → 受管开关」。契约即产品。
+OpenToggle 的模型是「脚本 → 受管理的开关」。契约本身就是产品。
 
 |  | SwiftBar / xbar | Hammerspoon | **OpenToggle** |
 |---|---|---|---|
-| 心智模型 | 打印输出 → 显示 | Lua 自动化框架 | 脚本 → 受管开关 |
-| 开/关语义 | 每个插件手写 | Lua 手写 | 内置 |
-| 进程生命周期 | 手动（pid 文件、pkill） | 手动 | spawn / SIGTERM / 孤儿清理 |
-| 状态持久化 | 手动 | 手动 | 自动，启动时恢复 |
-| 参数 UI | 无 | 自己实现 | 声明式（下拉 / 数字 / 快捷按钮 / 文本） |
+| 模型 | 打印输出 → 显示 | Lua 自动化框架 | 脚本 → 受管理的开关 |
+| 开关语义 | 每个插件自己写 | 用 Lua 自己写 | 内置（开关、常驻、按钮） |
+| 进程生命周期 | 手动（pid 文件、pkill） | 手动 | 进程组、SIGTERM → SIGKILL、清理遗留进程 |
+| 状态保存 | 手动 | 手动 | 启动时自动恢复 |
+| 参数 | 无 | 自己写 | 声明式：单选、带快捷值的数字、文本、按键 |
+| 场景、自动化、快捷键 | — | 自己写 | 内置 |
+| AI | — | — | 本地 API、命令行、MCP 服务器与 skill，改脚本需你确认 |
 
 ## 功能
 
-- **两类开关形态** —— 命令式 `toggle`（on/off/status 命令）与常驻 `daemon`（启动并持有，SIGTERM 停止）
-- **声明式参数** —— 下拉选择、带边界与快捷按钮的数字、自由文本；值以环境变量注入；修改即时热重启
-- **菜单栏存在感** —— 开关开启期间可新增独立状态栏图标（或替换主图标），可选每秒刷新的倒计时
-- **状态持久化** —— 期望状态持久保存并在启动时恢复：daemon 重新拉起，toggle 先查状态再按需执行
-- **脚本管理 GUI** —— 侧边栏增删改、带字段级文档的元数据表单、图标选择器（Emoji / SF Symbols）、深色代码编辑器 + 自动生成的只读契约头；手写脚本可无损往返编辑
-- **安全性** —— 退出时清理孤儿进程，daemon 自然结束（exit 0）自动复位，所有退出路径的未保存拦截，删除进废纸篓
-- **多语言** —— 英文与简体中文，默认跟随系统，运行时可切换
+- **三种类型**——`toggle`（on / off / status）、`daemon`（app 持有进程并负责结束它）、`action`（按一次运行一次，显示运行中与结果的按钮）
+- **面板**——菜单栏图标下的玻璃面板：列表或网格、舒适或紧凑、分组、搜索、行内参数、场景栏
+- **工作台**——代码优先的编辑器，语法高亮并标出契约问题；检查器编辑契约头（名称、图标、类型、参数、菜单栏），与代码双向同步；测试按钮与实时输出；运行历史；现成脚本的脚本库
+- **场景**——一键设置多个开关，再点一次恢复原样
+- **自动化**——在某个时间、连上某个网络、电源变化、某个 app 启动或退出、外接显示器连接、登录 / 唤醒 / 解锁、文件变化或按下快捷键时，运行开关或场景；可以限定星期与时间段；你手动改过的开关 10 分钟内不被规则改动；来回切换同一个开关的规则会被自动停用
+- **全局快捷键**——开关、场景、面板和工作台都可以设，自动检测冲突
+- **活动**——每次运行的来源（手动、快捷键、场景、自动化、AI、命令行……）、耗时、退出码与输出；可筛选、导出、清空
+- **菜单栏**——三种图标样式，可附带开启数量或倒计时，单个开关可以有自己的图标
+- **外观**——浅色、深色或跟随系统；五种强调色（默认「墨」，纯黑白）；玻璃或实色面板
+- **AI 集成**——本地 API、命令行、MCP 服务器与 agent skill；可以分项限制 AI 能做什么；AI 改脚本以差异对比展示，你确认后才写入；一键接入 Claude Code、Cursor、Codex
+- **深链接**——`opentoggle://`，可以在快捷指令、Raycast、Alfred 里调用
+- **隐私优先**——所有数据都在本机；唯一的网络请求是检查更新
+- **简体中文与英文**，可以随时切换
 
-## 环境要求
-
-- macOS 14+
-- Swift 工具链（当前从源码构建；app bundle 分发在路线图中）
-
-## 快速开始
-
-**安装为 app（推荐）：**
-
-```bash
-git clone git@github.com:HanlunWang/open-toggle.git
-cd open-toggle
-./Scripts/package.sh
-```
-
-脚本会构建 release 二进制、打成 `OpenToggle.app`（稳定 bundle id、`LSUIElement`）、用稳定身份签名（有代码签名证书则复用，否则自动创建自签证书）、安装到 `/Applications`，并把 `opentoggle` CLI 链接到 `~/.local/bin`。签名身份稳定意味着 macOS 权限授权（发键开关所需的辅助功能）**跨构建存活**——授权一次，随意重新打包。
-
-**或从源码运行（开发模式）：**
+## 安装
 
 ```bash
-swift run
+brew install --cask hanlunwang/tap/opentoggle
 ```
 
-注意：开发构建是 ad-hoc 签名，每次重新构建都会使之前的辅助功能授权失效——`opentoggle doctor` 可诊断此类问题。
+也可以在 [Releases](https://github.com/HanlunWang/open-toggle/releases) 下载磁盘映像。OpenToggle 使用 Developer ID 签名并经过公证，可以自动更新（更新包先校验 Ed25519 签名再安装）。需要 macOS 14 或更新版本。
 
-菜单栏出现开关图标。首次启动会安装一套开箱即用的预制开关（每个只安装一次，删除后不会复活）：
+Homebrew 安装时会同时链接 `opentoggle` 命令。第一次启动有一个简短的引导：从脚本库挑选开关、选择外观、接入 AI 客户端，每一步都可以跳过。
 
-| 开关 | 形态 | 功能 | 默认 |
-|---|---|---|---|
-| ☕️ Keep Awake | daemon | `caffeinate`，模式下拉 + 1/2/4/8 小时快捷按钮，菜单栏倒计时 | 启用 |
-| 👁️ Show Hidden Files | toggle | Finder 隐藏文件可见性 | 启用 |
-| 🌙 Dark Mode | toggle | 系统深色外观（首次触发一次自动化权限弹窗） | 启用 |
-| 🔇 Mute Audio | toggle | 系统输出静音 | 启用 |
-| ▦ Hide Desktop Icons | toggle | 隐藏桌面图标，适合投屏/录屏 | 启用 |
-| ⬒ Dock Auto-Hide | toggle | Dock 自动隐藏 | 启用 |
-| 📶 Wi-Fi | toggle | Wi-Fi 开关（自动探测设备名） | 停用 |
-| 🌐 Local HTTP Server | daemon | `python3 -m http.server`，端口 + 目录参数 | 停用 |
-| 🛡 Web Proxy | toggle | 系统 HTTP/HTTPS 代理，服务 / 主机 / 端口参数 | 停用 |
+### 从 0.5 升级
 
-隐藏的开关不出现在菜单栏面板，在脚本管理器侧边栏点眼睛图标即可恢复显示。隐藏只影响可见性——绝不会停止运行中的开关；隐藏一个正在运行的开关时，管理器会先询问你的处置方式。也可通过「管理脚本」新建，或直接把脚本放进目录后重新加载。
-
-预制脚本以纯 `.sh` 文件形式放在 [`Sources/OpenToggle/Switches/`](Sources/OpenToggle/Switches/)（构建时作为 SwiftPM 资源打包）——可直接浏览作为契约示例，或复制一份到脚本目录作为起点。
+直接安装 2.0 覆盖 0.5（`brew upgrade --cask opentoggle`）。第一次启动时会沿用脚本目录（`~/.config/open-toggle/switches/`），并导入哪些开关开着、参数值、隐藏的开关和语言设置。bundle id 与签名身份都没有变，已经授予的「辅助功能」权限继续有效。0.5 的 `/v1` API、命令行命令和 MCP 工具名都照常可用。
 
 ## 脚本契约
 
-一个开关 = `~/.config/open-toggle/switches/` 下的一个可执行脚本，元数据以 `# <switch.*>` 指令注释声明（前 40 行内）。
+一个开关就是 `~/.config/open-toggle/switches/`（可以在「设置 → 高级」里更改）下的一个可执行脚本，前 40 行里用 `# <switch.*>` 注释写元数据。
 
-### 指令
+```bash
+#!/bin/bash
+# <switch.name> Keep Awake
+# <switch.icon> lucide:coffee
+# <switch.type> daemon
+# <switch.description> 阻止休眠一段时间
+# <switch.param> key=mode type=select label=模式 default=d options="仅屏幕=d|屏幕与系统=dis"
+# <switch.param> key=duration type=number label="时长（分钟）" default=0 min=0 max=1440 presets="不限=0|1 小时=60|2 小时=120"
+# <switch.menubar> mode=add icon=lucide:coffee countdown=on
+ARGS="-${SWITCH_MODE:-d}"
+[ "${SWITCH_DURATION:-0}" -gt 0 ] && ARGS="$ARGS -t $((SWITCH_DURATION * 60))"
+exec caffeinate $ARGS
+```
 
-| 指令 | 必填 | 说明 |
+| 指令 | 必需 | 说明 |
 |---|---|---|
 | `<switch.name>` | 是 | 显示名称 |
-| `<switch.icon>` | 否 | Emoji，或 `sf:` 前缀的 SF Symbols 名（如 `sf:cup.and.saucer.fill`） |
-| `<switch.type>` | 否 | `toggle`（默认）或 `daemon` |
-| `<switch.param>` | 否 | 每行声明一个参数，见下文 |
-| `<switch.menubar>` | 否 | 开启期间的菜单栏行为，见下文 |
+| `<switch.icon>` | 否 | `lucide:<名称>`（[lucide.dev](https://lucide.dev) 上的任意图标）、emoji，或 `sf:<符号名>`（映射为 Lucide） |
+| `<switch.type>` | 否 | `toggle`（默认）、`daemon` 或 `action` |
+| `<switch.description>` | 否 | 一句话说明，显示在脚本库与悬浮提示里 |
+| `<switch.param>` | 否 | 每行一个参数，见下文 |
+| `<switch.menubar>` | 否 | 开启时在菜单栏的显示方式，见下文 |
 
-### 调用协议
+### 脚本怎么被执行
 
-**`toggle`** —— 命令式，适合幂等操作：
+| 类型 | 调用方式 | 结果 |
+|---|---|---|
+| `toggle` | `<脚本> on`、`<脚本> off`、`<脚本> status` | `status` 输出 `on` 或 `off`；面板打开时每 5 秒检查一次，后台每 30 秒。`status` 非零退出 → 未知；`on`/`off` 非零退出 → 出错 |
+| `daemon` | `<脚本> run` | app 持有进程。关闭时向它的进程组发 SIGTERM（3 秒后 SIGKILL）。退出码 0 表示自然结束，开关归位；非零 → 出错。请用 `exec` |
+| `action` | `<脚本>`（不带参数） | 退出码 0 表示成功；输出的最后一行显示为结果 |
 
-```
-<script> on       # 开启
-<script> off      # 关闭
-<script> status   # 向 stdout 输出 "on" 或 "off"；每 5 秒轮询
-```
-
-`status` 退出码非 0 时状态记为 *unknown*；`on`/`off` 非 0 记为 *error*。
-
-**`daemon`** —— 前台常驻进程：
-
-```
-<script> run      # 由 app 启动并持有
-```
-
-关闭发送 SIGTERM；请使用 `exec` 确保信号直达。exit 0 视为自然结束并复位开关；非零退出码标记为 *error*。
+每次执行都会注入 `OPENTOGGLE_BIN`（app 的二进制路径）、`OPENTOGGLE_TRIGGER`（由谁触发）以及参数 `SWITCH_<KEY>`；`PATH` 会补上 Homebrew 的 `bin` 目录。没有 shebang 的脚本用默认 shell 执行（「设置 → 高级」）。
 
 ### 参数
 
-```bash
-# <switch.param> key=mode type=select label=模式 default=d options="仅屏幕=d|屏幕与系统=dis"
-# <switch.param> key=duration type=number label="时长(分钟)" default=0 min=0 max=1440 presets="不限=0|1小时=60|2小时=120"
-# <switch.param> key=note type=text label=备注 hint="自由文本"
-```
-
-| 属性 | 适用类型 | 说明 |
+| 属性 | 适用于 | 说明 |
 |---|---|---|
-| `key` | 全部 | 标识符；注入为 `SWITCH_<KEY>`（转大写，非字母数字 → `_`） |
-| `type` | 全部 | `select` \| `number` \| `text` \| `key` |
-| `label` | 全部 | 面板中的显示标签 |
-| `default` | 全部 | 初始值；`select` 缺省取第一个候选项的 value |
-| `options` | select | `label=value` 对，以 `\|` 分隔 |
-| `presets` | number、text | 快捷按钮，同 `label=value\|…` 格式；与输入框并存 |
-| `min` / `max` | number | 取值边界（含端点） |
-| `hint` | 全部 | 占位符（text）或悬停提示（其他） |
+| `key` | 全部 | 标识，注入为 `SWITCH_<KEY>`（转大写，非字母数字变成 `_`） |
+| `type` | 全部 | `select`、`number`、`text` 或 `key` |
+| `label` | 全部 | 显示标签 |
+| `default` | 全部 | 初始值；`select` 不写时取第一个选项 |
+| `options` | select | 用 `\|` 分隔的 `标签=值` |
+| `presets` | number、text | 快捷值按钮，格式相同 |
+| `min` / `max` | number | 闭区间 |
+| `hint` | 全部 | 占位文字或提示 |
 
-`type=key` 渲染为按键选择器（按下捕获 / 常用键网格 / 鼠标键）。值为按键规范——`f15`、`cmd+shift+k`、`mouse:middle`——脚本用内置合成器发送：
+含空格的值要加引号。开关开着时改参数会用新值重启。`type=key` 显示按键选择器；脚本用 `"$OPENTOGGLE_BIN" press "$SWITCH_KEY"` 发送按键（需要一次性授予「辅助功能」权限）。
 
-```bash
-"${OPENTOGGLE_BIN:-opentoggle}" press "$SWITCH_NUDGE"   # OPENTOGGLE_BIN 已注入每个脚本的环境
-```
+### 菜单栏显示
 
-`opentoggle press` 基于 CGEvent，需一次性授予「辅助功能」权限；它取代各脚本自行调 osascript 的做法，把权限收敛到一个二进制上。
+`# <switch.menubar> mode=add icon=lucide:coffee countdown=on`——`mode=add` 开启时多显示一个图标，`mode=replace` 临时替换主图标；`countdown=on` 需要一个 `key=duration` 的数字参数（分钟，0 表示不限）。
 
-属性值含空格时以双引号包裹。每次调用均注入环境变量；开关开启时修改参数会以新环境重启。
+所有脚本提交——工作台、命令行、API、MCP——都会按契约检查：错误拒收，警告连同行号一起显示。
 
-### 菜单栏存在感
-
-```bash
-# <switch.menubar> mode=add icon=☕️ countdown=on
-```
-
-- `mode=add` —— 开启期间创建独立状态栏项，其菜单含一键关闭
-- `mode=replace` —— 临时替换 app 主图标
-- `icon` —— Emoji 或 `sf:<symbol-name>`
-- `countdown=on` —— 显示剩余时间（每秒刷新）；依赖 key 为 `duration` 的 number 参数（分钟，`0` 表示不限时）
-
-### 执行细节
-
-- 保存时自动 `chmod 755`；无执行位的文件回退以 `/bin/sh` 执行
-- 状态模型：`on` / `off` / `error` / `unknown`
-- 期望状态存于 `UserDefaults`，启动时恢复：daemon 重新拉起；toggle 先查 `status`，仅在需要时执行 `on`
-- app 退出时统一终止持有的 daemon 进程
-- 保存正在运行的开关的脚本后，会以新内容立即重启
-
-## CLI
-
-同一个二进制兼作 CLI：带任何参数即进入命令行模式（除 `validate` 外都需要 GUI app 在运行）。建议做个软链：
-
-```bash
-swift build && ln -sf "$(pwd)/.build/debug/OpenToggle" /usr/local/bin/opentoggle
-```
+## 命令行
 
 ```
-opentoggle list                    # 开关列表与状态
-opentoggle on|off <id>             # 开/关
+opentoggle list                    # 开关与状态
+opentoggle on|off <id>             # 打开或关闭
+opentoggle run <id>                # 运行按钮并打印输出
 opentoggle state <id>              # on | off | error | unknown
 opentoggle params <id>             # 参数与当前值
-opentoggle set <id> k=v [...]      # 设参数（运行中的开关热重启）
-opentoggle enable|disable <id>     # 菜单栏显示/隐藏
-opentoggle cat <id>                # 打印脚本源码
-opentoggle add <file.sh>           # 校验 + 安装新开关
-opentoggle put <id> <file.sh>      # 校验 + 替换已有开关脚本
+opentoggle set <id> k=v [...]      # 修改参数（开着的开关会重启）
+opentoggle enable|disable <id>     # 在面板中显示或隐藏
+opentoggle cat <id>                # 打印脚本
+opentoggle add <file.sh>           # 检查并安装新开关
+opentoggle put <id> <file.sh>      # 检查并替换脚本
 opentoggle rm <id>                 # 删除（移到废纸篓）
-opentoggle validate <file.sh>      # 离线契约检查
-opentoggle press <keyspec>         # 合成按键/鼠标事件（f15、cmd+shift+k、mouse:middle）
-opentoggle mcp                     # MCP stdio server
+opentoggle scenes                  # 列出场景
+opentoggle scene <名称>            # 激活场景，激活中时恢复
+opentoggle log [id] [--failed]     # 最近的运行记录
+opentoggle validate <file.sh>      # 离线检查契约
+opentoggle press <按键>            # 模拟按键或鼠标
+opentoggle doctor                  # 诊断权限与遗留进程
+opentoggle mcp                     # stdio 上的 MCP 服务器
 ```
 
-`--json` 输出机器可读格式。所有脚本提交路径（CLI / API / MCP）都会过契约 linter：error 拒收，warning 随响应返回。
+加 `--json` 输出机器可读的结果。`<id>` 是脚本文件名，`.sh` 可以省略。
 
-## AI 接入
+## AI 集成
 
-OpenToggle 为 AI agent 操作而设计：
+- **一键接入**——「设置 → AI 与集成」可以接入 Claude Code（`claude mcp add`）、Cursor（`~/.cursor/mcp.json`）和 Codex（`~/.codex/config.toml`），写入前先展示具体内容，并备份原文件。其他 MCP 客户端加入：
 
-- **本地控制 API** —— app 在 `127.0.0.1:43737` 提供 REST 接口（`GET /v1/switches`、`POST /v1/switches/{id}/on`、`PUT /v1/switches/{id}/script`、`POST /v1/scripts`、`POST /v1/validate` 等）。发现文件：`~/.config/open-toggle/api.json`。
-- **MCP server** —— `opentoggle mcp` 以 stdio 提供 MCP 工具（列表、开关、设参、带校验的脚本写入）：
-
-  ```bash
-  claude mcp add opentoggle -- /usr/local/bin/opentoggle mcp
+  ```json
+  { "mcpServers": { "opentoggle": { "command": "/opt/homebrew/bin/opentoggle", "args": ["mcp"] } } }
   ```
 
-- **Claude Code skill** —— [`skills/opentoggle/`](skills/opentoggle/) 向 agent 传授 CLI 与脚本创作工作流（写 → `validate` → `add`/`put` → 验证）：
+- **MCP 工具**——列出开关、开关与改参数、运行按钮、读写脚本（会检查契约）、激活场景、读取自动化与运行记录、查询待确认的修改。
+- **权限**——决定 AI 能做什么：读取、开关、改脚本、删脚本（默认不允许）。AI 改脚本会先等你确认：工作台用差异对比展示，同时发通知。这些限制用来防止 agent 误操作，不是安全边界——本机上的任何程序本来就能直接修改脚本文件。
+- **Skill**——[`skills/opentoggle/`](skills/opentoggle/SKILL.md) 教 AI 使用命令行和编写流程（写 → `validate` → `add`/`put` → 验证）。在「设置 → AI 与集成」里安装。
+- **本地 API**——`127.0.0.1:43737`，只监听本机回环；写操作需要 `~/.config/open-toggle/api.json` 里的令牌（命令行与 MCP 会自动读取）。`/v1` 与 0.5 兼容；`/v2` 新增按钮、运行记录、事件流（SSE）、场景、自动化与待确认修改。每个请求都带来源，并记录在「活动」里。
 
-  ```bash
-  ln -s "$(pwd)/skills/opentoggle" ~/.claude/skills/opentoggle
-  ```
-
-三条路径共用同一个契约 linter 作为安全网：AI 写出的不合规脚本会被拒收，并返回结构化、可修复的错误信息。
-
-## 架构
+## 深链接
 
 ```
-Sources/OpenToggle/
-├── Main.swift                 # 入口：带参数 → CLI，无参数 → GUI
-├── OpenToggleApp.swift        # MenuBarExtra 入口、管理窗口、退出拦截
-├── MenuView.swift             # 面板：状态灯、Toggle、可展开参数控件
-├── ManagerView.swift          # 管理窗口：侧边栏增删改、元数据表单、代码编辑器
-├── IconPicker.swift           # Emoji / SF Symbols 选择网格
-├── StatusBarController.swift  # 脚本声明的状态栏项（图标 + 倒计时 + 菜单）
-├── SwitchModel.swift          # 契约解析（指令、参数、菜单栏）
-├── SwitchManager.swift        # 注册表、进程生命周期、轮询、持久化
-├── ScriptRunner.swift         # Process 封装（命令 / daemon spawn、环境注入）
-├── ControlServer.swift        # 本地 HTTP 控制 API（127.0.0.1:43737）
-├── ContractLinter.swift       # 契约静态检查（所有提交路径共用）
-├── CLI.swift                  # 基于控制 API 的命令行客户端
-├── MCPServer.swift            # MCP stdio server（`opentoggle mcp`）
-├── Localization.swift         # 运行时可切换的字符串表（en、zh-Hans）
-├── ExampleScripts.swift       # 预制库清单（从 bundle 资源加载）
-└── Switches/                  # 预制开关脚本（.sh），构建时打包为资源
+opentoggle://toggle/keep-awake      opentoggle://on/wifi      opentoggle://off/wifi
+opentoggle://run/flush-dns          opentoggle://scene/专注
+opentoggle://panel                  opentoggle://workbench/scenes
+opentoggle://settings/ai
 ```
 
-## 路线图
+## 隐私
 
-- App bundle 打包、公证、Homebrew cask
-- 依赖辅助功能权限的示例（CGEvent 键盘防挂机）
-- Manifest 式契约（TOML）作为注释头的替代
-- 定时调度、条件触发、开关依赖关系
+没有账号，没有遥测。脚本、状态和日志都保存在本机（`~/.config/open-toggle/` 与 `~/Library/Application Support/OpenToggle/`）。唯一的网络请求是到 GitHub Releases 检查更新。权限只在需要时才请求：按键参数需要「辅助功能」，想在规则里显示 Wi-Fi 名称时才需要「定位」，脚本控制其他 app 时由 macOS 询问「自动化」，第一次发通知时询问「通知」。
+
+## 从源码构建
+
+OpenToggle 2 用 Go 和 [mygo](https://github.com/egoist/mygo) 编写（原生 GPU 界面，不用 WebView）。引擎、API、命令行与 MCP 服务器在 `internal/`，不依赖界面框架；`app/` 是界面。
+
+```bash
+go test ./...                    # 单元测试与端到端测试
+go tool mygo dev                 # 运行 app，修改后自动重载
+go tool mygo build               # 签名、公证的 app 与磁盘映像（需要 mygo.json 里的签名身份）
+```
+
+架构方案与各里程碑的记录在 [docs/v2-architecture.md](docs/v2-architecture.md)。OpenToggle 0.5（Swift）保留在 `main` 分支的历史里。
 
 ## 许可证
 
-MIT
+[MIT](LICENSE)

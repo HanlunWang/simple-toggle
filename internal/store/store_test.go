@@ -206,3 +206,39 @@ func TestExportImportReset(t *testing.T) {
 		t.Fatal("reset")
 	}
 }
+
+func TestImportV1SystemLanguage(t *testing.T) {
+	s, _ := Open(t.TempDir())
+	if _, err := s.ImportV1(V1Data{Language: "system"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Setting("language"); got != "" {
+		t.Fatalf("v1 \"system\" should mean follow the system, got %q", got)
+	}
+}
+
+// TestRealV1Import 读取本机 0.5 的偏好（只读），导入到临时目录，打印导入了什么。默认跳过：
+//
+//	OT_V1_REAL=1 go test -run TestRealV1Import -v ./internal/store/
+func TestRealV1Import(t *testing.T) {
+	if os.Getenv("OT_V1_REAL") != "1" {
+		t.Skip("set OT_V1_REAL=1 to read this Mac's 0.5 preferences")
+	}
+	v, err := ReadV1(V1Domain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := Open(t.TempDir())
+	imported, err := s.ImportV1(v)
+	if err != nil || !imported {
+		t.Fatalf("import: %v %v", imported, err)
+	}
+	t.Logf("desired on: %v", v.Desired)
+	t.Logf("hidden: %v", v.Hidden)
+	t.Logf("params: %d switches", len(v.Params))
+	t.Logf("seeded: %d presets", len(v.Seeded))
+	t.Logf("language: %q → setting %q", v.Language, s.Setting("language"))
+	if again, _ := s.ImportV1(v); again {
+		t.Fatal("import ran twice")
+	}
+}

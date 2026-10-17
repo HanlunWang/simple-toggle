@@ -6,6 +6,9 @@
   "icon": "resources/icon.png",
   "main": "./cmd/opentoggle",
   "out": "build",
+  "resources": [
+    "skills"
+  ],
   "urlSchemes": [
     "opentoggle"
   ],
@@ -17,6 +20,16 @@
       "NSAppleEventsUsageDescription": "Your switch scripts may control other apps (for example System Events for Dark Mode).",
       "NSLocationWhenInUseUsageDescription": "Only used when you create a rule that matches a Wi-Fi network by name.",
       "NSLocationUsageDescription": "Only used when you create a rule that matches a Wi-Fi network by name."
-    }
+    },
+    "signingIdentity": "Developer ID Application: Hanlun Wang (964MJX79NX)",
+    "notarize": {
+      "keychainProfile": "opentoggle-notary"
+    },
+    "dmgTitle": "OpenToggle"
+  },
+  "updates": {
+    "publicKey": "58sZwmz5rvaUrJyp3fT65R3CIRGCWhzHqUJ0rf6dYJw=",
+    "github": "HanlunWang/open-toggle",
+    "privateKey": "~/.config/opentoggle-release/mygo-update.key"
   }
 }

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/icon-1024.png" width="140" alt="OpenToggle icon">
+  <img src="resources/icon.png" width="140" alt="OpenToggle icon">
 </p>
 
 <h1 align="center">OpenToggle</h1>
@@ -8,231 +8,175 @@
 
 <p align="center">English | <a href="README.zh-CN.md">简体中文</a></p>
 
-OpenToggle renders each of your automation scripts as a first-class switch in the macOS menu bar — a name, a status light, and a toggle. Turning a switch on starts the automation; turning it off stops it; state survives restarts. Write the automation in any language, declare a few metadata directives, and OpenToggle handles the process lifecycle, status polling, parameter UI, and persistence.
+OpenToggle renders each of your automation scripts as a first-class control in the macOS menu bar — a switch, a long-running process, or a button. A few comment lines at the top of the script describe it; OpenToggle handles the process lifecycle, status polling, parameter UI, persistence, scenes, automations, shortcuts and a full local API for AI agents.
 
 ## Why
 
-Everyday macOS automations — keep the display awake, jiggle a key to stay "active", flip a proxy, show hidden files — each traditionally require a separate single-purpose utility crowding the menu bar. Script-to-menu-bar tools exist (SwiftBar, xbar, Hammerspoon), but their model is *script → printed output → display*. None of them offer a first-class **switch abstraction**: managed on/off semantics, process lifecycle, and state persistence have to be hand-rolled per plugin.
+Everyday macOS automations — keep the display awake, flip a proxy, show hidden files, flush DNS — each traditionally need their own single-purpose utility crowding the menu bar. Script-to-menu-bar tools exist (SwiftBar, xbar, Hammerspoon), but their model is *script → printed output → display*: on/off semantics, process lifecycle and state persistence are hand-rolled per plugin.
 
 OpenToggle's model is *script → managed switch*. The contract is the product.
 
 |  | SwiftBar / xbar | Hammerspoon | **OpenToggle** |
 |---|---|---|---|
 | Mental model | print output → display | Lua automation framework | script → managed switch |
-| On/off semantics | hand-rolled per plugin | hand-rolled in Lua | built-in |
-| Process lifecycle | manual (pid files, pkill) | manual | spawn / SIGTERM / orphan cleanup |
-| State persistence | manual | manual | automatic, restored on launch |
-| Parameter UI | none | DIY | declarative (dropdown / number / presets / text) |
+| On/off semantics | hand-rolled per plugin | hand-rolled in Lua | built in (toggle, daemon, button) |
+| Process lifecycle | manual (pid files, pkill) | manual | process groups, SIGTERM → SIGKILL, orphan sweep |
+| State persistence | manual | manual | restored at launch |
+| Parameters | none | DIY | declarative: select, number with presets, text, key |
+| Scenes, automations, shortcuts | — | DIY | built in |
+| AI agents | — | — | local API, CLI, MCP server and skill, with approval |
 
 ## Features
 
-- **Two switch forms** — imperative `toggle` (on/off/status commands) and long-running `daemon` (spawn & hold, SIGTERM to stop)
-- **Declarative parameters** — dropdowns, bounded numbers with preset buttons, free text; values injected as environment variables; live-restart on change
-- **Menu bar presence** — a switch can add its own status item (or replace the app icon) while active, with an optional per-second countdown
-- **State persistence** — desired states stored and re-applied at launch; daemons re-spawned, toggles re-checked before re-applying
-- **Script manager GUI** — sidebar CRUD, metadata form with per-field documentation, icon picker (emoji / SF Symbols), dark code editor with an auto-generated read-only contract header; lossless round-trip editing of hand-written scripts
-- **Safety** — orphan cleanup on quit, natural daemon exit (exit 0) resets the switch, unsaved-change guards on every exit path, delete moves to Trash
-- **Localized** — English and Simplified Chinese, follows the system language, switchable at runtime
+- **Three switch types** — `toggle` (on / off / status), `daemon` (the app holds the process and stops it), and `action` (a button that runs once and shows progress and the result)
+- **Panel** — a glass flyout under the menu bar icon: list or grid, comfortable or compact, groups, search, inline parameters, a scene bar
+- **Workbench** — a code-first editor with syntax highlighting and contract diagnostics; an inspector that edits the header (name, icon, type, parameters, menu bar) in sync with the code; test buttons with live output; run history; a library of ready-made scripts
+- **Scenes** — one click to set several switches; click again to put everything back the way it was
+- **Automations** — run switches or scenes at a time, when joining a network, on power changes, when an app launches or quits, when a display connects, at login / wake / unlock, when a file changes, or on a shortcut; optional day and time windows; your manual changes win for 10 minutes; rules that flip a switch back and forth are paused automatically
+- **Global shortcuts** — for switches, scenes, the panel and the workbench, with conflict detection
+- **Activity** — every run with its source (manual, shortcut, scene, automation, AI, CLI…), duration, exit code and output; filter, export, clear
+- **Menu bar** — three icon styles, an optional count or countdown, and per-switch status items
+- **Appearance** — light, dark or system; five accent colors (default: ink, pure black and white); glass or solid panel
+- **AI integration** — local API, CLI, MCP server and agent skill; per-capability permissions for AI; script changes from AI are shown as a diff and written only after you approve; one-click setup for Claude Code, Cursor and Codex
+- **Deep links** — `opentoggle://` for Shortcuts, Raycast and Alfred
+- **Private by design** — everything stays on your Mac; the only network request checks for updates
+- **English and Simplified Chinese**, switchable at runtime
 
-## Requirements
-
-- macOS 14+
-- Swift toolchain (build from source; app bundle distribution is on the roadmap)
-
-## Getting Started
-
-**Install as an app (recommended):**
-
-```bash
-git clone git@github.com:HanlunWang/open-toggle.git
-cd open-toggle
-./Scripts/package.sh
-```
-
-This builds a release binary, wraps it into `OpenToggle.app` (stable bundle id, `LSUIElement`), signs it with a stable identity (an existing code-signing certificate if you have one, otherwise a self-signed one is created), installs it to `/Applications`, and links the `opentoggle` CLI into `~/.local/bin`. A stable signing identity means macOS permission grants (Accessibility for key-sending switches) **survive rebuilds** — grant once, repackage freely.
-
-**Or run from source (dev mode):**
+## Install
 
 ```bash
-swift run
+brew install --cask hanlunwang/tap/opentoggle
 ```
 
-Note: dev binaries are ad-hoc signed, so each rebuild invalidates a previous Accessibility grant — `opentoggle doctor` diagnoses this.
+Or download the disk image from [Releases](https://github.com/HanlunWang/open-toggle/releases). OpenToggle is signed with a Developer ID, notarized, and updates itself (updates are verified with an Ed25519 signature before they are installed). Requires macOS 14 or later.
 
-A switch icon appears in the menu bar. First launch seeds a library of ready-to-use switches into the scripts directory (each installed once; deleting one won't resurrect it):
+The Homebrew cask also links the `opentoggle` command. On first launch a short walkthrough lets you pick switches from the library, choose a look and connect AI clients; every step can be skipped.
 
-| Switch | Form | What it does | Default |
-|---|---|---|---|
-| ☕️ Keep Awake | daemon | `caffeinate` with a mode dropdown and 1/2/4/8 h duration presets; menu bar countdown | on |
-| 👁️ Show Hidden Files | toggle | Finder hidden-file visibility | on |
-| 🌙 Dark Mode | toggle | System appearance (one-time Automation permission prompt) | on |
-| 🔇 Mute Audio | toggle | System output mute | on |
-| ▦ Hide Desktop Icons | toggle | Clean desktop for screen sharing / recording | on |
-| ⬒ Dock Auto-Hide | toggle | Dock auto-hiding | on |
-| 📶 Wi-Fi | toggle | Wi-Fi power (device auto-detected) | deactivated |
-| 🌐 Local HTTP Server | daemon | `python3 -m http.server` with port + directory parameters | deactivated |
-| 🛡 Web Proxy | toggle | System HTTP/HTTPS proxy with service / host / port parameters | deactivated |
+### Upgrading from 0.5
 
-Hidden switches stay out of the menu bar panel until you show them again (eye icon in the script manager sidebar). Hiding is visibility-only — it never stops a running switch; the manager asks what to do when you hide one that is running. Create your own via **Manage Scripts**, or drop a script into the directory and hit reload.
+Install 2.0 over 0.5 (`brew upgrade --cask opentoggle`). Your scripts folder (`~/.config/open-toggle/switches/`), which switches were on, parameter values, hidden switches and the language carry over on first launch. The bundle identifier and signing identity are unchanged, so the Accessibility permission you granted stays valid. The `/v1` API, the CLI commands and the MCP tool names of 0.5 keep working.
 
-The preset scripts live in [`Sources/OpenToggle/Switches/`](Sources/OpenToggle/Switches/) as plain `.sh` files (bundled as SwiftPM resources at build time) — browse them as contract examples, or copy one into your scripts directory as a starting point.
+## Script contract
 
-## Script Contract
+A switch is one executable script in `~/.config/open-toggle/switches/` (changeable in Settings → Advanced), carrying metadata as `# <switch.*>` comments within its first 40 lines.
 
-A switch is a single executable script in `~/.config/open-toggle/switches/`, carrying metadata as `# <switch.*>` directive comments within the first 40 lines.
-
-### Directives
+```bash
+#!/bin/bash
+# <switch.name> Keep Awake
+# <switch.icon> lucide:coffee
+# <switch.type> daemon
+# <switch.description> Prevent sleep for a while
+# <switch.param> key=mode type=select label=Mode default=d options="Display only=d|Display & system=dis"
+# <switch.param> key=duration type=number label="Duration (min)" default=0 min=0 max=1440 presets="Unlimited=0|1 h=60|2 h=120"
+# <switch.menubar> mode=add icon=lucide:coffee countdown=on
+ARGS="-${SWITCH_MODE:-d}"
+[ "${SWITCH_DURATION:-0}" -gt 0 ] && ARGS="$ARGS -t $((SWITCH_DURATION * 60))"
+exec caffeinate $ARGS
+```
 
 | Directive | Required | Description |
 |---|---|---|
 | `<switch.name>` | yes | Display name |
-| `<switch.icon>` | no | Emoji, or SF Symbols name prefixed `sf:` (e.g. `sf:cup.and.saucer.fill`) |
-| `<switch.type>` | no | `toggle` (default) or `daemon` |
+| `<switch.icon>` | no | `lucide:<name>` (any icon from [lucide.dev](https://lucide.dev)), an emoji, or `sf:<symbol>` (mapped to Lucide) |
+| `<switch.type>` | no | `toggle` (default), `daemon` or `action` |
+| `<switch.description>` | no | One sentence for the library and tooltips |
 | `<switch.param>` | no | One parameter per line; see below |
 | `<switch.menubar>` | no | Menu bar presence while on; see below |
 
-### Invocation protocol
+### How scripts are run
 
-**`toggle`** — imperative, for idempotent operations:
+| Type | Invocation | Result |
+|---|---|---|
+| `toggle` | `<script> on`, `<script> off`, `<script> status` | `status` prints `on` or `off`; polled every 5 s while the panel is open, 30 s in the background. Non-zero from `status` → *unknown*; from `on`/`off` → *error* |
+| `daemon` | `<script> run` | The app holds the process. Off sends SIGTERM to its process group (SIGKILL after 3 s). Exit 0 resets the switch; non-zero → *error*. Use `exec` |
+| `action` | `<script>` (no arguments) | Exit 0 is success; the last line of output is shown as the result |
 
-```
-<script> on       # turn on
-<script> off      # turn off
-<script> status   # print "on" or "off" to stdout; polled every 5 s
-```
-
-A non-zero exit code from `status` marks the state *unknown*; a non-zero exit from `on`/`off` marks it *error*.
-
-**`daemon`** — long-running foreground process:
-
-```
-<script> run      # spawned and held by the app
-```
-
-Off sends SIGTERM. Use `exec` so the signal reaches your process directly. Exit 0 is treated as natural completion and resets the switch; a non-zero exit marks it *error*.
+Every run gets `OPENTOGGLE_BIN` (the app's binary), `OPENTOGGLE_TRIGGER` (who started it) and the parameters as `SWITCH_<KEY>`; Homebrew's `bin` directories are added to `PATH`. Scripts without a shebang run with the default shell (Settings → Advanced).
 
 ### Parameters
-
-```bash
-# <switch.param> key=mode type=select label=Mode default=d options="Display only=d|Display & system=dis"
-# <switch.param> key=duration type=number label="Duration (min)" default=0 min=0 max=1440 presets="Unlimited=0|1 h=60|2 h=120"
-# <switch.param> key=note type=text label=Note hint="free text"
-```
 
 | Attribute | Applies to | Description |
 |---|---|---|
 | `key` | all | Identifier; injected as `SWITCH_<KEY>` (uppercased, non-alphanumerics → `_`) |
-| `type` | all | `select` \| `number` \| `text` \| `key` |
-| `label` | all | Display label in the panel |
-| `default` | all | Initial value; for `select`, defaults to the first option's value |
+| `type` | all | `select`, `number`, `text` or `key` |
+| `label` | all | Display label |
+| `default` | all | Initial value; for `select`, the first option when omitted |
 | `options` | select | `label=value` pairs separated by `\|` |
-| `presets` | number, text | Quick-pick buttons, same `label=value\|…` format; coexist with the input field |
+| `presets` | number, text | Quick-pick buttons, same format |
 | `min` / `max` | number | Inclusive bounds |
-| `hint` | all | Placeholder (text) or tooltip (others) |
+| `hint` | all | Placeholder or tooltip |
 
-`type=key` renders a key picker (press-to-capture, common-keys grid, or mouse buttons). Its value is a key spec — `f15`, `cmd+shift+k`, `mouse:middle` — which scripts send via the built-in synthesizer:
-
-```bash
-"${OPENTOGGLE_BIN:-opentoggle}" press "$SWITCH_NUDGE"   # OPENTOGGLE_BIN is injected into every script
-```
-
-`opentoggle press` uses CGEvent and needs a one-time Accessibility grant; it replaces per-script osascript hacks and concentrates the permission on one binary.
-
-Quote any attribute value containing spaces. Values are injected as environment variables on every invocation; changing a parameter while a switch is on restarts it with the new environment.
+Quote values that contain spaces. Changing a parameter while a switch is on restarts it. `type=key` renders a key picker; scripts send the key with `"$OPENTOGGLE_BIN" press "$SWITCH_KEY"` (one-time Accessibility grant).
 
 ### Menu bar presence
 
-```bash
-# <switch.menubar> mode=add icon=☕️ countdown=on
-```
+`# <switch.menubar> mode=add icon=lucide:coffee countdown=on` — `mode=add` shows a dedicated status item while on, `mode=replace` swaps the main icon; `countdown=on` needs a number parameter with `key=duration` in minutes (0 = unlimited).
 
-- `mode=add` — dedicated status item while on; its menu offers a direct turn-off action
-- `mode=replace` — temporarily replaces the app's own menu bar icon
-- `icon` — emoji or `sf:<symbol-name>`
-- `countdown=on` — shows remaining time (refreshed every second); requires a `number` parameter with key `duration` in minutes, where `0` means unlimited
-
-### Execution details
-
-- Scripts are `chmod 755` on save; files without the executable bit fall back to `/bin/sh`
-- State model: `on` / `off` / `error` / `unknown`
-- Desired states persist in `UserDefaults` and are re-applied at launch: daemons re-spawn; toggles check `status` first and only run `on` if needed
-- All held daemon processes are terminated when the app quits
-- Saving a script whose switch is currently on restarts it with the new content
+Every script submission — workbench, CLI, API or MCP — is linted against the contract: errors are rejected, warnings are shown with their line numbers.
 
 ## CLI
 
-The same binary doubles as a CLI: any argument switches it to command-line mode (the GUI app must be running for everything except `validate`). Symlink it for convenience:
-
-```bash
-swift build && ln -sf "$(pwd)/.build/debug/OpenToggle" /usr/local/bin/opentoggle
-```
-
 ```
 opentoggle list                    # switches with state
-opentoggle on|off <id>             # toggle a switch
+opentoggle on|off <id>             # turn a switch on or off
+opentoggle run <id>                # run an action and print its output
 opentoggle state <id>              # on | off | error | unknown
 opentoggle params <id>             # parameters and current values
 opentoggle set <id> k=v [...]      # set parameters (restarts a running switch)
-opentoggle enable|disable <id>     # show/hide in the menu bar
-opentoggle cat <id>                # print script source
-opentoggle add <file.sh>           # validate + install a new switch
-opentoggle put <id> <file.sh>      # validate + replace a switch's script
-opentoggle rm <id>                 # delete (moves to Trash)
+opentoggle enable|disable <id>     # show or hide in the panel
+opentoggle cat <id>                # print the script
+opentoggle add <file.sh>           # validate and install a new switch
+opentoggle put <id> <file.sh>      # validate and replace a script
+opentoggle rm <id>                 # delete (moves to the Trash)
+opentoggle scenes                  # list scenes
+opentoggle scene <name>            # activate a scene, or restore it when active
+opentoggle log [id] [--failed]     # recent runs
 opentoggle validate <file.sh>      # offline contract lint
-opentoggle press <keyspec>         # synthesize a key/mouse event (f15, cmd+shift+k, mouse:middle)
-opentoggle mcp                     # MCP stdio server
+opentoggle press <keyspec>         # synthesize a key or mouse event
+opentoggle doctor                  # diagnose permissions and leftover processes
+opentoggle mcp                     # MCP server over stdio
 ```
 
-`--json` gives machine-readable output. Every script submission (CLI, API, or MCP) is linted against the contract: errors reject the submission, warnings are returned alongside.
+`--json` gives machine-readable output. `<id>` is the script file name; `.sh` is optional.
 
-## AI Integration
+## AI integration
 
-OpenToggle is built to be driven by AI agents:
+- **One-click setup** — Settings → AI & Integrations connects Claude Code (`claude mcp add`), Cursor (`~/.cursor/mcp.json`) and Codex (`~/.codex/config.toml`), showing exactly what will be written first and backing up the file. Any other MCP client: add
 
-- **Local control API** — the app serves `127.0.0.1:43737` (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …). Discovery file: `~/.config/open-toggle/api.json`.
-- **MCP server** — `opentoggle mcp` speaks MCP over stdio with tools for listing, toggling, parameter setting, and validated script authoring:
-
-  ```bash
-  claude mcp add opentoggle -- /usr/local/bin/opentoggle mcp
+  ```json
+  { "mcpServers": { "opentoggle": { "command": "/opt/homebrew/bin/opentoggle", "args": ["mcp"] } } }
   ```
 
-- **Claude Code skill** — [`skills/opentoggle/`](skills/opentoggle/) teaches agents the CLI and the authoring workflow (write → `validate` → `add`/`put` → verify):
+- **MCP tools** — list switches, set switches and parameters, run actions, read and write scripts (validated), activate scenes, read automations and run history, check pending changes.
+- **Permissions** — choose what AI agents may do: read, flip switches, write scripts, delete scripts (off by default). Script changes from AI wait for your approval and are shown as a diff in the workbench; you get a notification. These limits guard against agent mistakes; they are not a security boundary, since any program on your Mac can edit the script files.
+- **Skill** — [`skills/opentoggle/`](skills/opentoggle/SKILL.md) teaches agents the CLI and the authoring workflow (write → `validate` → `add`/`put` → verify). Install it from Settings → AI & Integrations.
+- **Local API** — `127.0.0.1:43737`, loopback only; writes need the token from `~/.config/open-toggle/api.json` (the CLI and MCP read it). `/v1` is compatible with 0.5; `/v2` adds actions, run history, server-sent events, scenes, automations and changes. Every request carries its source and shows up in Activity.
 
-  ```bash
-  ln -s "$(pwd)/skills/opentoggle" ~/.claude/skills/opentoggle
-  ```
-
-The contract linter is the safety net in all three paths: an AI-authored script that violates the contract is rejected with structured, fixable error messages.
-
-## Architecture
+## Deep links
 
 ```
-Sources/OpenToggle/
-├── Main.swift                 # Entry: args → CLI mode, no args → GUI
-├── OpenToggleApp.swift        # MenuBarExtra entry, manager window, termination guards
-├── MenuView.swift             # Panel: status lights, toggles, expandable parameter controls
-├── ManagerView.swift          # Manager window: sidebar CRUD, metadata form, code editor
-├── IconPicker.swift           # Emoji / SF Symbols picker grids
-├── StatusBarController.swift  # Script-declared status items (icon + countdown + menu)
-├── SwitchModel.swift          # Contract parsing (directives, params, menubar)
-├── SwitchManager.swift        # Registry, process lifecycle, polling, persistence
-├── ScriptRunner.swift         # Process wrapper (commands / daemon spawn, env injection)
-├── ControlServer.swift        # Local HTTP control API (127.0.0.1:43737)
-├── ContractLinter.swift       # Static contract checks for all submission paths
-├── CLI.swift                  # Command-line client over the control API
-├── MCPServer.swift            # MCP stdio server (`opentoggle mcp`)
-├── Localization.swift         # Runtime-switchable string tables (en, zh-Hans)
-├── ExampleScripts.swift       # Preset library manifest (loads from bundle resources)
-└── Switches/                  # Preset switch scripts (.sh), bundled as resources
+opentoggle://toggle/keep-awake      opentoggle://on/wifi      opentoggle://off/wifi
+opentoggle://run/flush-dns          opentoggle://scene/Focus
+opentoggle://panel                  opentoggle://workbench/scenes
+opentoggle://settings/ai
 ```
 
-## Roadmap
+## Privacy
 
-- App bundle packaging, notarization, Homebrew cask
-- Accessibility-dependent examples (keyboard jiggler via CGEvent)
-- Manifest-style contract (TOML) as an alternative to comment headers
-- Scheduling, conditional triggers, switch dependencies
+No accounts, no telemetry. Scripts, state and logs stay on your Mac (`~/.config/open-toggle/` and `~/Library/Application Support/OpenToggle/`). The only network request checks GitHub Releases for updates. Permissions are requested only when needed: Accessibility for key parameters, Location only if you want Wi-Fi names shown in rules, Apple Events when a script controls another app, Notifications when the first one is sent.
+
+## Building from source
+
+OpenToggle 2 is written in Go with [mygo](https://github.com/egoist/mygo) (native GPU UI, no web view). The engine, API, CLI and MCP server live in `internal/` and do not depend on the UI framework; `app/` is the UI.
+
+```bash
+go test ./...                    # unit and end-to-end tests
+go tool mygo dev                 # run the app with live reload
+go tool mygo build               # signed, notarized app and disk image (needs the signing identity in mygo.json)
+```
+
+The architecture and the record of each milestone are in [docs/v2-architecture.md](docs/v2-architecture.md). OpenToggle 0.5 (Swift) lives on in the `main` branch history.
 
 ## License
 
-MIT
+[MIT](LICENSE)

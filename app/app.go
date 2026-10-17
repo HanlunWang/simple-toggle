@@ -49,7 +49,7 @@ func Run() error {
 		}
 	}
 	// 语言：设置里选了就用它，否则跟随系统（mygo 自带的文案也随之切换）
-	if lang := st.Setting(keyLanguage); lang != "" {
+	if lang := validLanguage(st.Setting(keyLanguage)); lang != "" {
 		mygo.App.SetLocale(lang)
 	}
 	setLanguage(mygo.App.Locale())

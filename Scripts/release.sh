@@ -1,116 +1,83 @@
 #!/bin/bash
 #
-# OpenToggle 发布流水线：
-#   release 构建 → app bundle → Developer ID 签名（hardened runtime + timestamp）
-#   → zip → notarytool 公证 → stapler 装订 → spctl 验收 → dist/ 产物 + cask sha256
+# OpenToggle 2 发布：测试 → mygo build（通用二进制、Developer ID 签名、公证、装订、
+# 自动更新文件）→ 验收产物 → 输出 cask 需要的 sha256。
+#
+#   ./Scripts/release.sh            只在本地构建与验收（不上传任何东西）
+#   ./Scripts/release.sh --upload   另外上传到 GitHub 的草稿 Release（检查后再手动发布）
 #
 # 前置（一次性）：
-#   1. Apple Developer Program 会员生效
-#   2. Xcode → Accounts → Manage Certificates → Developer ID Application
-#   3. xcrun notarytool store-credentials "opentoggle-notary" \
-#        --apple-id <AppleID邮箱> --team-id <TEAMID>
-#
-# 用法：./Scripts/release.sh
-# 产物：dist/OpenToggle-<version>.zip（已公证装订，可直接挂 GitHub Release / brew cask）
+#   1. Developer ID Application 证书（mygo.json 的 macos.signingIdentity）
+#   2. xcrun notarytool store-credentials opentoggle-notary --apple-id <邮箱> --team-id 964MJX79NX
+#   3. 更新签名私钥：mygo.json 的 updates.privateKey 指向的文件（或 MYGO_UPDATER_PRIVATE_KEY）。
+#      私钥丢失后已安装的 app 将无法再收到更新——务必在密码管理器里留一份
+#   4. 上传需要 gh 已登录
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="OpenToggle"
-BUNDLE_ID="io.github.hanlunwang.OpenToggle"
-NOTARY_PROFILE="opentoggle-notary"
-VERSION="$(grep -m1 'let appVersion' Sources/OpenToggle/ControlServer.swift | sed 's/.*"\(.*\)".*/\1/')"
+UPLOAD=0
+[ "${1:-}" = "--upload" ] && UPLOAD=1
+
+VERSION="$(python3 -c 'import json;print(json.load(open("mygo.json"))["version"])')"
+IDENTITY="$(python3 -c 'import json;print(json.load(open("mygo.json"))["macos"]["signingIdentity"])')"
+PROFILE="$(python3 -c 'import json;print(json.load(open("mygo.json"))["macos"]["notarize"]["keychainProfile"])')"
+KEY="$(python3 -c 'import json,os;print(os.path.expanduser(json.load(open("mygo.json"))["updates"].get("privateKey","")))')"
+
+fail() { echo "✗ $*" >&2; exit 1; }
 
 # ---- 前置检查：缺什么直说什么 ----
-IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
-  | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)"
-if [ -z "$IDENTITY" ]; then
-  echo "✗ 未找到 Developer ID Application 证书。"
-  echo "  → Xcode → Settings → Accounts → Manage Certificates → ＋ → Developer ID Application"
-  exit 1
+[ -z "$(git status --porcelain)" ] || fail "工作区有未提交的改动，先提交再发布"
+grep -q "^## ${VERSION}\$" CHANGELOG.md || fail "CHANGELOG.md 缺少 ## ${VERSION} 一节（更新说明从这里读取）"
+security find-identity -v -p codesigning | grep -qF "$IDENTITY" || fail "钥匙串里没有签名身份：$IDENTITY"
+xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1 || fail "公证凭据 $PROFILE 不可用"
+if [ -z "${MYGO_UPDATER_PRIVATE_KEY:-}" ]; then
+  [ -f "$KEY" ] || fail "找不到更新签名私钥（updates.privateKey 或 MYGO_UPDATER_PRIVATE_KEY）"
 fi
-if ! xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
-  echo "✗ 公证凭据 \"$NOTARY_PROFILE\" 不可用。"
-  echo "  → xcrun notarytool store-credentials \"$NOTARY_PROFILE\" --apple-id <邮箱> --team-id <TEAMID>"
-  exit 1
-fi
-echo "==> Signing identity: $IDENTITY"
-
-# ---- 构建与组装（与 package.sh 同构，但面向分发） ----
-echo "==> Building release binary (v$VERSION)"
-swift build -c release >/dev/null
-
-STAGE_DIR="$(mktemp -d)"
-STAGE="$STAGE_DIR/$APP_NAME.app"
-mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
-cp ".build/release/$APP_NAME" "$STAGE/Contents/MacOS/$APP_NAME"
-[ -d ".build/release/${APP_NAME}_${APP_NAME}.bundle" ] && \
-  cp -R ".build/release/${APP_NAME}_${APP_NAME}.bundle" "$STAGE/Contents/Resources/"
-[ -f "Assets/AppIcon.icns" ] && cp "Assets/AppIcon.icns" "$STAGE/Contents/Resources/AppIcon.icns"
-
-cat > "$STAGE/Contents/Info.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-    <key>CFBundleName</key><string>$APP_NAME</string>
-    <key>CFBundleDisplayName</key><string>$APP_NAME</string>
-    <key>CFBundleExecutable</key><string>$APP_NAME</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>$VERSION</string>
-    <key>CFBundleVersion</key><string>$VERSION</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>LSUIElement</key><true/>
-    <key>CFBundleIconFile</key><string>AppIcon</string>
-    <key>NSHighResolutionCapable</key><true/>
-    <key>NSAppleEventsUsageDescription</key><string>Switch scripts may control system settings (e.g. appearance) via System Events.</string>
-</dict>
-</plist>
-PLIST
-
-# ---- 出厂断言：资源包必须在 bundle 里（v0.5.0 教训：编译机上的 dev
-#      回退路径会掩盖资源缺失，只有别人的机器会崩） ----
-if [ ! -d "$STAGE/Contents/Resources/${APP_NAME}_${APP_NAME}.bundle" ]; then
-  echo "✗ 资源包未打进 app（Contents/Resources/${APP_NAME}_${APP_NAME}.bundle 缺失）"
-  exit 1
+if [ "$UPLOAD" = 1 ]; then
+  gh auth status >/dev/null 2>&1 || fail "gh 未登录"
+  git rev-parse "v${VERSION}" >/dev/null 2>&1 && fail "标签 v${VERSION} 已存在"
 fi
 
-# ---- 签名（公证硬性要求：hardened runtime + 安全时间戳） ----
-echo "==> Codesigning (hardened runtime)"
-codesign --force --sign "$IDENTITY" --identifier "$BUNDLE_ID" \
-  --options runtime --timestamp "$STAGE"
-codesign --verify --strict --verbose=1 "$STAGE"
+echo "==> OpenToggle ${VERSION}"
+echo "==> Tests"
+go vet ./...
+go test -count=1 ./...
 
-# ---- 打包与公证 ----
-mkdir -p dist
-ZIP="dist/$APP_NAME-$VERSION.zip"
-rm -f "$ZIP"
-ditto -c -k --keepParent "$STAGE" "$ZIP"
+echo "==> Build (universal, signed, notarized)"
+rm -rf build
+ARGS=(build -platform darwin/universal)
+[ "$UPLOAD" = 1 ] && ARGS+=(-upload)
+go tool mygo "${ARGS[@]}"
 
-echo "==> Notarizing (this waits for Apple, typically 1-5 min)"
-xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+# ---- 验收 ----
+APP="$(find build -maxdepth 3 -name 'OpenToggle.app' -type d | head -1)"
+DMG="$(find build -maxdepth 2 -name '*.dmg' | head -1)"
+[ -n "$APP" ] && [ -n "$DMG" ] || fail "没有找到构建出的 app 或 dmg（build/）"
+echo "==> Verify $APP"
+[ -f "$APP/Contents/Resources/skills/opentoggle/SKILL.md" ] || fail "skill 没有打进 app"
+BIN="$APP/Contents/MacOS/OpenToggle"
+lipo -archs "$BIN" | grep -q arm64 && lipo -archs "$BIN" | grep -q x86_64 || fail "不是通用二进制：$(lipo -archs "$BIN")"
+[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = "io.github.hanlunwang.OpenToggle" ] || fail "bundle id 不对"
+codesign --verify --deep --strict "$APP"
+spctl -a -vv --type execute "$APP" 2>&1 | grep -q "Notarized Developer ID" || fail "Gatekeeper 没有认出公证"
+xcrun stapler validate "$DMG" >/dev/null || fail "dmg 没有装订公证票据"
+"$BIN" version | grep -qF "$VERSION" || fail "二进制报告的版本不是 $VERSION"
+find build -name "update-darwin-universal.json" | grep -q . || fail "没有生成自动更新清单（检查私钥配置）"
 
-echo "==> Stapling ticket"
-xcrun stapler staple "$STAGE"
-# 重新打包装订后的 app（装订改变了 bundle 内容）
-rm -f "$ZIP"
-ditto -c -k --keepParent "$STAGE" "$ZIP"
-
-# ---- 验收：以 Gatekeeper 的视角确认 ----
-echo "==> Gatekeeper assessment"
-spctl -a -vv --type execute "$STAGE"
-
-SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
-rm -rf "$STAGE_DIR"
-
+SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 cat <<DONE
 
-✓ Release artifact ready: $ZIP
-  version: $VERSION
-  sha256:  $SHA   ← 填入 Packaging/opentoggle.rb 的 sha256 字段
+✓ OpenToggle ${VERSION}
+  dmg:     ${DMG}
+  sha256:  ${SHA}
+  (把 version 与 sha256 填进 Packaging/opentoggle.rb，再复制到 tap 仓库的 Casks/opentoggle.rb)
 
-Next:
-  gh release create "v$VERSION" "$ZIP" --title "OpenToggle $VERSION" --notes "..."
-  然后更新 brew tap（见 Packaging/opentoggle.rb 顶部说明）
 DONE
+if [ "$UPLOAD" = 1 ]; then
+  ASSET="$(gh release view "v${VERSION}" --json assets -q '.assets[].name' | grep '\.dmg$' | head -1)"
+  echo "已上传到草稿 Release v${VERSION}（dmg 资源名：${ASSET}）。"
+  echo "检查后在 GitHub 上发布：发布后已安装的 app 才会看到更新，cask 的下载地址也才可用。"
+else
+  echo "只在本地构建。确认无误后：./Scripts/release.sh --upload"
+fi

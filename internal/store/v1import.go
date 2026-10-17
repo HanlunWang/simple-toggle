@@ -96,7 +96,8 @@ func (s *Store) ImportV1(v V1Data) (bool, error) {
 	for _, f := range v.Seeded {
 		s.st.Seeded[f] = true
 	}
-	if v.Language != "" && s.st.Settings["language"] == "" {
+	// v1 的「跟随系统」存成 "system"；v2 用空值表示跟随系统，只接受 zh-Hans 与 en
+	if (v.Language == "zh-Hans" || v.Language == "en") && s.st.Settings["language"] == "" {
 		s.st.Settings["language"] = v.Language
 	}
 	s.st.V1Imported = true
