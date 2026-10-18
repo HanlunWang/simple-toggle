@@ -74,7 +74,7 @@ func (w *workbench) libraryCats(c *ui.Context) {
 				continue
 			}
 			item := pal.navItem(c, "lc-"+cat, "", tr("cat_"+cat), w.libCat == cat, false, func() {
-				pal.mono(c, itoa(n), 11, pal.T3)
+				pal.count(c, "n", n)
 			})
 			if item.Clicked() {
 				w.libCat = cat
@@ -108,7 +108,7 @@ func (w *workbench) library(c *ui.Context) {
 				if w.noticeErr {
 					col = pal.Red
 				}
-				ui.Text(c, w.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0)
+				w.noticeLabel(c, col)
 			}
 		})
 		ui.SearchField(c.Key("lib-q"), &w.libQuery).Width(220).Placeholder(tr("lib_search"))
@@ -130,8 +130,8 @@ func (w *workbench) library(c *ui.Context) {
 		}
 		sc.Children(func() {
 			ui.Grid(c.Key("lib-grid")).FillWidth().Columns(max(1, int((width+10)/220))).Gap(10).Children(func() {
-				for _, e := range items {
-					w.libCard(c, e)
+				for i, e := range items {
+					w.libCard(c, e, i)
 				}
 			})
 		})
@@ -142,7 +142,7 @@ func (w *workbench) library(c *ui.Context) {
 	})
 }
 
-func (w *workbench) libCard(c *ui.Context, e libEntry) {
+func (w *workbench) libCard(c *ui.Context, e libEntry, i int) {
 	pal := w.pal
 	sel := w.libSel == e.File
 	card := ui.Column(c.Key("lib-" + e.File)).MinHeight(128).Padding(14).Radius(12).Gap(8).Label(e.header.Name).
@@ -157,6 +157,7 @@ func (w *workbench) libCard(c *ui.Context, e libEntry) {
 	}
 	card.Background(card.AnimateColor("bg", bg, animHover)).Border(pick(sel, float32(1.5), 1), card.AnimateColor("bd", border, animHover))
 	pressPose(card, 0.985)
+	riseIn(card, time.Duration(min(i, 12))*25*time.Millisecond) // 第一次出现时逐张浮现
 	card.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			switchIcon(c, e.header.Icon, 17).TextColor(pal.T1)

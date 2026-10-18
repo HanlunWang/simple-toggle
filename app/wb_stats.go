@@ -174,7 +174,7 @@ func (w *workbench) statCard(c *ui.Context, key, title, note string, body func()
 	ui.Column(c.Key(key)).FillWidth().Padding(14, 16, 16).Gap(12).Radius(12).Border(1, pal.L2).Background(alpha(pal.FG, 0.015)).
 		Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
-				ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(pal.T2).SingleLine()
+				pal.caption(c, title)
 				ui.Spacer(c)
 				if note != "" {
 					ui.Text(c.Key("note"), note).FontSize(11.5).TextColor(pal.T3).SingleLine().ContentTransition(ui.ContentTransition{})
@@ -187,11 +187,15 @@ func (w *workbench) statCard(c *ui.Context, key, title, note string, body func()
 func (w *workbench) statKPIs(c *ui.Context, sv statsView) {
 	pal := w.pal
 	n := len(sv.days)
+	nk := 0
 	kpi := func(key, label, value, sub string, subCol ui.Color) {
-		ui.Column(c.Key(key)).Grow(1).Basis(0).MinWidth(0).Padding(13, 14).Gap(4).Radius(12).Border(1, pal.L2).Background(alpha(pal.FG, 0.015)).Children(func() {
-			ui.Text(c, label).FontSize(11.5).TextColor(pal.T3).SingleLine().Ellipsis("…")
-			ui.Text(c.Key("v"), value).FontSize(22).FontWeight(600).TextColor(pal.T1).SingleLine().Ellipsis("…").
-				FontFeatures("tnum").ContentTransition(ui.ContentTransition{Numeric: true})
+		card := ui.Column(c.Key(key)).Grow(1).Basis(0).MinWidth(0).Padding(13, 14).Gap(4).Radius(12).Border(1, pal.L2).Background(alpha(pal.FG, 0.015))
+		riseIn(card, time.Duration(nk)*45*time.Millisecond)
+		nk++
+		card.Children(func() {
+			pal.caption(c, label).Ellipsis("…")
+			ui.Text(c.Key("v"), value).Font(monoFont).FontSize(22).FontWeight(600).TextColor(pal.T1).SingleLine().Ellipsis("…").
+				ContentTransition(ui.ContentTransition{Numeric: true})
 			ui.Text(c.Key("s"), sub).FontSize(11).TextColor(subCol).SingleLine().Ellipsis("…").ContentTransition(ui.ContentTransition{})
 		})
 	}
@@ -323,6 +327,10 @@ func (w *workbench) statDaily(c *ui.Context, sv statsView) {
 				}
 				bc := chart.Rect(c.Key("b-"+b.key), x.Band(i), y.Span(0, float64(b.n))).Radius(3).Label(b.tip).
 					Transition(ui.ElementTransition{Duration: 280 * time.Millisecond, Ease: ui.EaseInOut})
+				// 第一次出现时从底部长出来，从左到右错开
+				if g := enterOnce(bc, 420*time.Millisecond, time.Duration(min(i, 60))*7*time.Millisecond); g < 1 {
+					bc.TransformOrigin(0.5, 1).Scale(1, g)
+				}
 				hovered := bc.Hovered()
 				bc.Background(bc.AnimateColor("c", alpha(col, pick(hovered, float32(1), 0.78)), animHover))
 				if hovered {
@@ -375,6 +383,9 @@ func (w *workbench) statCalendar(c *ui.Context, now time.Time) {
 	w.statCard(c, "c-cal", tr("st_calendar"), note, func() {
 		const labelW, top, gap = float32(22), float32(16), float32(3)
 		box := ui.Box(c.Key("cal")).FillWidth().Height(top + 7*13 + 6*gap + 2)
+		if k := enterOnce(box, 400*time.Millisecond, 120*time.Millisecond); k < 1 {
+			box.Opacity(k)
+		}
 		cellOf := func(r ui.Rect) float32 { return min(13, (r.W-labelW)/weeks-gap) }
 		if px, py, over := box.PointerPosition(); over {
 			r := box.Bounds()
@@ -449,6 +460,9 @@ func (w *workbench) statHours(c *ui.Context, sv statsView) {
 	w.statCard(c, "c-hours", tr("st_hours"), note, func() {
 		const labelW, top, gap = float32(22), float32(14), float32(2)
 		box := ui.Box(c.Key("hours")).FillWidth().Height(top + 7*14 + 6*gap)
+		if k := enterOnce(box, 400*time.Millisecond, 180*time.Millisecond); k < 1 {
+			box.Opacity(k)
+		}
 		cellW := func(r ui.Rect) float32 { return (r.W - labelW - 23*gap) / 24 }
 		if px, py, over := box.PointerPosition(); over {
 			cw := cellW(ui.Rect{W: box.Bounds().W})
@@ -571,7 +585,9 @@ func (w *workbench) statRanking(c *ui.Context, sv statsView) {
 					ui.Text(c, w.statName(it.ID)).FontSize(12.5).TextColor(pal.T1).SingleLine().Ellipsis("…").Width(170)
 					frac := float32(it.Count) / float32(max(hi, 1))
 					track := ui.Box(c).Grow(1).Height(8).Radius(4).Background(pal.L1)
-					shown := track.AnimateTo("w", frac, ui.Animation{Duration: 420 * time.Millisecond, Ease: ui.EaseOut})
+					// 第一次出现时从左边伸出来（逐行错开），之后数据变化时平滑过渡
+					shown := track.AnimateTo("w", frac, ui.Animation{Duration: 420 * time.Millisecond, Ease: ui.EaseOut}) *
+						enterOnce(track, 520*time.Millisecond, time.Duration(i)*35*time.Millisecond)
 					track.Draw(func(p *ui.Painter, rr ui.Rect) {
 						p.Fill(ui.Rect{X: rr.X, Y: rr.Y, W: max(rr.W*shown, 3), H: rr.H}, alpha(col, pick(sel, float32(1), 0.7)), 4)
 					})

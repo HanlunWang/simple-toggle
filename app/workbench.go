@@ -340,7 +340,7 @@ func (w *workbench) sidebar(c *ui.Context) {
 			}
 			item := pal.navItem(c, "nav-"+n.id, n.iconName, n.label, w.section == n.id, false, func() {
 				if count != "" {
-					pal.mono(c, count, 11, pal.T3)
+					pal.countText(c, "n", count)
 				}
 			})
 			if item.Clicked() {
@@ -393,6 +393,7 @@ func (w *workbench) menuPanel(panel ui.Element) {
 	pal := w.pal
 	panel.Width(210).Padding(4).Radius(10).Background(pal.Elev).Border(1, pal.L2).
 		Shadow(0, 8, 24, 0, alpha(ui.Hex("#000000"), 0.18)).Gap(1)
+	popIn(panel)
 }
 
 func (w *workbench) menuItem(c *ui.Context, key, iconName, label string) bool {

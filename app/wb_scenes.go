@@ -354,5 +354,5 @@ func (w *workbench) noticeText(c *ui.Context) {
 	if w.noticeErr {
 		col = w.pal.Red
 	}
-	ui.Text(c, w.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0)
+	w.noticeLabel(c, col)
 }

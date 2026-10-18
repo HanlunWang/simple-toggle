@@ -55,6 +55,7 @@ type panel struct {
 	// reveal 在面板第一次按真实高度画好之后调用：窗口从透明淡入（避免先按估计高度出现再跳动）
 	reveal     func()
 	revealed   bool
+	rowIdx     int  // 本帧已画的行数（打开时逐行出现的错开延迟）
 	lessMotion bool // 系统「减弱动态效果」
 }
 
@@ -213,9 +214,18 @@ func (p *panel) view(c *ui.Context) {
 func (p *panel) header(c *ui.Context) {
 	pal := p.pal
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Padding(12, 12, 8, 16).Children(func() {
-		ui.Text(c, "SimpleToggle").FontSize(13).FontWeight(600).TextColor(pal.T1)
-		if n := p.onCount(); n > 0 {
-			ui.Textf(c, tr("on_count"), n).Font("monospace").FontSize(11).TextColor(pal.T3)
+		// 终端风格的标题：等宽小写，前面一个随开关数量发光的提示符
+		n := p.onCount()
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			mark := ui.Text(c.Key("prompt"), "›").Font(monoFont).FontSize(14).FontWeight(600)
+			lit := mark.AnimateTo("lit", b2f(n > 0), animColor)
+			mark.TextColor(pal.T3.Mix(pal.glowColor(), lit))
+			ui.Text(c, "simpletoggle").Font(monoFont).FontSize(12.5).FontWeight(600).TextColor(pal.T1)
+		})
+		if n > 0 {
+			ui.Text(c.Key("on-count"), fmt.Sprintf(tr("on_count"), n)).Font(monoFont).FontSize(11).TextColor(pal.T3).
+				ContentTransition(ui.ContentTransition{Numeric: true}).
+				Transition(ui.ElementTransition{Duration: 160 * time.Millisecond, Enter: &ui.Motion{X: -4}, Exit: &ui.Motion{}})
 		}
 		ui.Spacer(c)
 		b := p.iconButton(c, "btn-search", "search", tr("search_tip"), p.searching)
@@ -232,7 +242,7 @@ func (p *panel) iconButton(c *ui.Context, key, name, tip string, active bool) ui
 }
 
 func (p *panel) searchField(c *ui.Context) {
-	ui.Row(c).FillWidth().Padding(0, 12, 8).Children(func() {
+	ui.Row(c.Key("search-row")).FillWidth().Padding(0, 12, 8).Transition(motionReveal).Children(func() {
 		f := ui.SearchField(c.Key("search-field"), &p.query).FillWidth()
 		f.Label(tr("search"))
 	})
@@ -240,8 +250,8 @@ func (p *panel) searchField(c *ui.Context) {
 
 func (p *panel) axBanner(c *ui.Context) {
 	pal := p.pal
-	ui.Row(c).FillWidth().Margin(0, 12, 8).Padding(8, 10).Radius(10).Gap(8).AlignItems(ui.Center).
-		Background(alpha(pal.Amber, 0.12)).Children(func() {
+	ui.Row(c.Key("ax-banner")).FillWidth().Margin(0, 12, 8).Padding(8, 10).Radius(10).Gap(8).AlignItems(ui.Center).
+		Background(alpha(pal.Amber, 0.12)).Transition(motionReveal).Children(func() {
 		icon(c, "keyboard", 14).TextColor(pal.Amber)
 		ui.Text(c, tr("ax_title")).FontSize(11.5).TextColor(pal.T1).Grow(1).Wrap()
 		if ui.Button(c.Key("ax-grant"), tr("ax_button")).Clicked() && p.requestAX != nil {
@@ -288,8 +298,21 @@ func (p *panel) groups(list []engine.View) []group {
 	return out
 }
 
+// entrance 让行在面板显示时逐行淡入上浮（错开 28ms，最多错开 10 行）。
+func (p *panel) entrance(e ui.Element) {
+	idx := p.rowIdx
+	p.rowIdx++
+	shown := p.revealed || p.reveal == nil
+	a := ui.Animation{Duration: 280 * time.Millisecond, Ease: ui.EaseOut, Delay: time.Duration(min(idx, 10)) * 28 * time.Millisecond}
+	k := e.AnimateTo("in", b2f(shown), a)
+	if k < 1 {
+		e.Opacity(k).Translate(0, (1-k)*6)
+	}
+}
+
 func (p *panel) body(c *ui.Context) {
 	pal := p.pal
+	p.rowIdx = 0
 	list := p.visible()
 	ui.Column(c).FillWidth().Padding(4, 6, 6).Gap(0).Children(func() {
 		if len(list) == 0 {
@@ -303,7 +326,7 @@ func (p *panel) body(c *ui.Context) {
 				h.Children(func() {
 					turn := h.AnimateTo("turn", 90*(1-b2f(p.collapsed[name])), animColor)
 					icon(c, "chevron-right", 11).TextColor(pal.T3).Rotate(turn)
-					ui.Text(c, name).FontSize(11).FontWeight(600).TextColor(pal.T3)
+					pal.caption(c, name)
 					ui.Spacer(c)
 					if p.collapsed[name] {
 						on := 0
@@ -312,7 +335,7 @@ func (p *panel) body(c *ui.Context) {
 								on++
 							}
 						}
-						ui.Textf(c, "%d/%d", on, len(views)).Font("monospace").FontSize(10.5).TextColor(pal.T3)
+						ui.Textf(c, "%d/%d", on, len(views)).Font(monoFont).FontSize(10.5).TextColor(pal.T3)
 					}
 				})
 				if h.Clicked() {
@@ -389,6 +412,8 @@ func (p *panel) iconTile(c *ui.Context, v engine.View, compact bool) {
 	}
 	t := ui.Row(c.Key("ico-"+v.ID)).Size(s, s).Radius(s * 0.3).Shrink(0).AlignItems(ui.Center).Justify(ui.Center)
 	t.Background(t.AnimateColor("bg", bg, animColor))
+	// 开着的开关：图标块外一圈很淡的光
+	t.Shadow(0, 0, 10, 0, t.AnimateColor("glow", pick(on, alpha(pal.glowColor(), 0.28), alpha(pal.glowColor(), 0)), animColor))
 	col := t.AnimateColor("fg", fg, animColor)
 	if v.State == engine.Running || v.State == engine.Pending || p.pendingFor(v.ID) {
 		ring := pal.Accent
@@ -522,7 +547,9 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 	if compact {
 		h = 34
 	}
-	ui.Column(c.Key("item-" + v.ID)).FillWidth().Transition(motionRow).Children(func() {
+	item := ui.Column(c.Key("item-" + v.ID)).FillWidth().Transition(motionRow)
+	p.entrance(item)
+	item.Children(func() {
 		r := ui.Row(c.Key("row-"+v.ID)).FillWidth().Height(h).AlignItems(ui.Center).Gap(10).Padding(0, 8).Radius(11)
 		bg := ui.Transparent
 		switch {
@@ -537,7 +564,7 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 			label := ui.Column(c.Key("label-" + v.ID)).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c, v.Name).FontSize(13).FontWeight(500).TextColor(pal.T1).SingleLine().Ellipsis("…")
 				if sub, col := p.subline(v); sub != "" && !compact {
-					ui.Text(c.Key("sub"), sub).FontSize(11).TextColor(col).SingleLine().Ellipsis("…").
+					ui.Text(c.Key("sub"), sub).Font(monoFont).FontSize(10.5).TextColor(col).SingleLine().Ellipsis("…").
 						ContentTransition(ui.ContentTransition{})
 				}
 			})
@@ -719,6 +746,8 @@ func (p *panel) chip(c *ui.Context, key, label string, active bool) bool {
 		bg = pal.L1
 	}
 	ch.Background(ch.AnimateColor("bg", bg, animColor)).Border(1, ch.AnimateColor("bd", border, animColor))
+	// 选中的胶囊微微发光（0.5 版的样子）
+	ch.Shadow(0, 0, 8, 0, ch.AnimateColor("glow", pick(active, alpha(pal.glowColor(), 0.30), alpha(pal.glowColor(), 0)), animColor))
 	pressPose(ch, 0.95)
 	ch.Children(func() {
 		ui.Text(c, label).FontSize(11.5).TextColor(ch.AnimateColor("fg", col, animColor)).SingleLine().Ellipsis("…")
@@ -825,6 +854,7 @@ func (p *panel) tile(c *ui.Context, v engine.View) {
 	}
 	t.Background(t.AnimateColor("bg", bg, animColor)).Border(1, t.AnimateColor("bd", border, animColor))
 	pressPose(t, 0.96)
+	p.entrance(t)
 	fg, sub := pal.T1, pal.T3
 	if on && v.Type != contract.Action && pal.Ink {
 		fg, sub = pal.BG, alpha(pal.BG, 0.7)
@@ -909,7 +939,7 @@ func (p *panel) footer(c *ui.Context) {
 
 // sceneBar 是面板顶部的场景栏：glass 材质的胶囊，激活中的用强调色。
 func (p *panel) sceneBar(c *ui.Context) {
-	ui.ScrollHorizontal(c.Key("scenes")).FillWidth().Padding(2, 12, 10).Children(func() {
+	ui.ScrollHorizontal(c.Key("scenes")).FillWidth().Padding(2, 12, 10).Transition(motionReveal).Children(func() {
 		ui.Row(c).Gap(6).Children(func() {
 			for _, sv := range p.scenes {
 				sv := sv

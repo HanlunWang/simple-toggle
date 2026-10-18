@@ -363,7 +363,9 @@ func (w *workbench) switchEditor(c *ui.Context) {
 	if d.conflict {
 		w.conflictBanner(c, d)
 	}
-	ui.Row(c.Key("ed-grid")).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+	// 每个开关一个编辑区：在侧栏换开关时新内容淡入
+	ui.Row(c.Key("ed-grid-"+d.id)).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).
+		Transition(ui.ElementTransition{Duration: 160 * time.Millisecond, Enter: &ui.Motion{}}).Children(func() {
 		ui.Column(c.Key("ed-col")).Grow(1).MinWidth(0).FillHeight().Children(func() {
 			ui.Row(c.Key("band")).FillWidth().Padding(6, 16).Gap(8).AlignItems(ui.Center).Background(pal.BG).Children(func() {
 				icon(c, "link-2", 12).TextColor(pal.T3)
@@ -427,7 +429,7 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 				if w.noticeErr {
 					col = pal.Red
 				}
-				ui.Text(c, w.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0)
+				w.noticeLabel(c, col)
 			case d.modified():
 				ui.Text(c, tr("unsaved")).FontSize(11.5).TextColor(pal.T3).SingleLine()
 			case !w.savedAt[d.id].IsZero():
@@ -548,7 +550,7 @@ func (w *workbench) bottomPanel(c *ui.Context, d *doc) {
 				}
 				ui.Text(c, t.label).FontSize(12).TextColor(col).SingleLine()
 				if t.count >= 0 {
-					pal.mono(c, itoa(t.count), 11, col)
+					pal.countText(c, "n", itoa(t.count)).TextColor(col)
 				}
 			})
 			if tb.Clicked() {

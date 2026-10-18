@@ -60,7 +60,7 @@ func (w *workbench) activityFilters(c *ui.Context) {
 			}
 			n := counts[f]
 			item := pal.navItem(c, "af-"+f, "", label, w.actTab == 1 && w.actFilter == f, false, func() {
-				pal.mono(c, itoa(n), 11, pal.T3)
+				pal.count(c, "n", n)
 			})
 			if item.Clicked() {
 				w.actFilter, w.runSel, w.actTab = f, 0, 1
@@ -90,7 +90,7 @@ func (w *workbench) activity(c *ui.Context) {
 				if w.noticeErr {
 					col = pal.Red
 				}
-				ui.Text(c, w.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0)
+				w.noticeLabel(c, col)
 			}
 		})
 		if w.actTab == 1 && pal.button(c, "export", tr("act_export"), "download", btnGhost, len(runs) == 0).Clicked() && len(runs) > 0 && w.exportRuns != nil {

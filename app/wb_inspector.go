@@ -103,7 +103,7 @@ func (w *workbench) inspectorView(c *ui.Context, d *doc, v *engine.View) {
 		}
 	})
 
-	w.inspSection(c, "s-params", tr("sec_params"), func() { w.pal.mono(c, itoa(len(h.Params)), 11, w.pal.T3) }, func() {
+	w.inspSection(c, "s-params", tr("sec_params"), func() { w.pal.count(c, "n", len(h.Params)) }, func() {
 		w.paramsView(c, d)
 	})
 
@@ -297,21 +297,17 @@ func (w *workbench) paramsView(c *ui.Context, d *doc) {
 	for i, p := range params {
 		i, p := i, p
 		open := w.paramOpen == i
-		box := ui.Column(c.Key("param-"+itoa(i))).FillWidth().Radius(8).Border(1, pal.L2)
+		box := ui.Column(c.Key("param-" + itoa(i))).FillWidth().Radius(8).Clip().Transition(motionRow)
+		box.Border(1, box.AnimateColor("bd", pick(open, pal.L3, pal.L2), animColor))
 		box.Children(func() {
 			row := ui.Row(c.Key("prow")).FillWidth().Padding(7, 9).Gap(8).AlignItems(ui.Center).Label(p.Key)
-			if row.Hovered() {
-				row.Background(pal.L1)
-			}
+			row.Background(row.AnimateColor("bg", pick(row.Hovered(), pal.L1, ui.Transparent), animHover))
 			row.Children(func() {
 				pal.mono(c, p.Key, 11.5, pal.T1)
 				ui.Text(c, p.Label).FontSize(12).TextColor(pal.T3).SingleLine().Grow(1).MinWidth(0)
 				pal.badge(c, tr("pt_"+string(p.Type)), "")
-				name := "chevron-right"
-				if open {
-					name = "chevron-down"
-				}
-				icon(c, name, 13).TextColor(pal.T3)
+				turn := row.AnimateTo("turn", 90*b2f(open), animKnob)
+				icon(c, "chevron-right", 13).TextColor(pal.T3).Rotate(turn)
 			})
 			if row.Clicked() {
 				if open {
@@ -321,9 +317,11 @@ func (w *workbench) paramsView(c *ui.Context, d *doc) {
 				}
 			}
 			if open {
-				pal.hair(c)
-				ui.Column(c.Key("pform")).FillWidth().Padding(10, 10, 12).Gap(8).Children(func() {
-					w.paramForm(c, d, i, p, params, write)
+				ui.Column(c.Key("pform-wrap")).FillWidth().Transition(motionReveal).Children(func() {
+					pal.hair(c)
+					ui.Column(c.Key("pform")).FillWidth().Padding(10, 10, 12).Gap(8).Children(func() {
+						w.paramForm(c, d, i, p, params, write)
+					})
 				})
 			}
 		})

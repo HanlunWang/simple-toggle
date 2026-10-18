@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -53,52 +54,57 @@ func pressPose(e ui.Element, scale float32) ui.Element {
 	return e.AnimatePose(pose, animPress)
 }
 
-// toggle 是 SimpleToggle 自己的开关：轨道颜色随开合渐变，圆钮用弹簧滑动、按下时拉长，
-// busy（等待脚本结果）时圆钮里转一个小环。无障碍上仍是一个开关（SwitchBase），名字由调用方给 Label。
+// toggle 是 SimpleToggle 的开关，延续 0.5 版的「发光拨杆」：描线胶囊，关时是空心圆钮，
+// 开时圆钮变成实心的强调色并微微发光，胶囊描边变亮、外圈一层很淡的光晕。
+// 圆钮用弹簧滑动、按下时拉长；busy（等脚本结果）时光晕呼吸。无障碍上仍是一个开关。
 func (p palette) toggle(c *ui.Context, key string, on *bool, busy bool, compact bool) ui.Element {
-	w, h := float32(38), float32(22)
+	w, h := float32(38), float32(21)
 	if compact {
-		w, h = 32, 19
+		w, h = 32, 18
 	}
 	sw := ui.SwitchBase(c.Key(key), on).Size(w, h).Radius(h / 2).Shrink(0)
 	pos := sw.AnimateTo("knob", b2f(*on), animKnob)
+	lit := max(0, min(sw.AnimateTo("lit", b2f(*on), animColor), 1)) // 颜色与光晕：不回弹
 	press := sw.AnimateTo("press", b2f(sw.Pressed()), animHover)
 	hover := sw.AnimateTo("hover", b2f(sw.Hovered()), animHover)
-	onCol := p.Accent
-	if p.Ink {
-		onCol = p.FG
-	}
-	offCol := alpha(p.FG, 0.13+0.05*hover)
-	sw.Background(offCol.Mix(onCol, max(0, min(pos, 1))))
-	knobCol := ui.RGB(255, 255, 255)
-	if p.Ink && p.Dark {
-		knobCol = knobCol.Mix(p.BG, max(0, min(pos, 1))) // 浅色轨道上用深色圆钮
-	}
-	var spin float32
+	glow := p.glowColor()
+	breath := float32(1)
 	if busy {
-		spin = sw.Loop("spin", 900*time.Millisecond, ui.Linear)
+		t := sw.Loop("breath", 1200*time.Millisecond, ui.Linear)
+		breath = 0.45 + 0.55*float32(0.5-0.5*math.Cos(2*math.Pi*float64(t)))
 	}
 	sw.Draw(func(pt *ui.Painter, r ui.Rect) {
-		in := float32(2)
+		rad := r.H / 2
+		// 胶囊：极淡的底、1px 描边；开启时描边换成强调色并带外圈光晕
+		if lit > 0 {
+			pt.Shadow(r, rad, 0, 0, 7, 0, alpha(glow, 0.22*lit*breath))
+		}
+		pt.Fill(r, alpha(p.FG, 0.03+0.03*hover).Mix(alpha(glow, 0.10), lit), rad)
+		pt.Stroke(r, alpha(p.FG, 0.30+0.10*hover).Mix(alpha(glow, 0.75), lit), rad, 1)
+		// 圆钮
+		in := float32(3)
 		d := r.H - 2*in
-		kw := d + 5*press // 按下时圆钮拉长，像 iOS
+		kw := d + 4*press // 按下时拉长
 		x := r.X + in + pos*(r.W-2*in-kw)
 		knob := ui.Rect{X: x, Y: r.Y + in, W: kw, H: d}
-		pt.Shadow(knob, d/2, 0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.18+0.10*hover))
-		pt.Fill(knob, knobCol, d/2)
-		if busy {
-			var path ui.Path
-			cx, cy, rr := knob.X+knob.W/2, knob.Y+knob.H/2, d*0.26
-			path.Circle(cx, cy, rr).Trim(spin, spin+0.32)
-			pt.StrokePath(&path, 1.6, onCol)
-			if spin+0.32 > 1 {
-				var wrap ui.Path
-				wrap.Circle(cx, cy, rr).Trim(0, spin+0.32-1)
-				pt.StrokePath(&wrap, 1.6, onCol)
-			}
+		if lit > 0 {
+			pt.Shadow(knob, d/2, 0, 0, 10, 0, alpha(glow, 0.45*lit*breath)) // 外层柔光
+			pt.Shadow(knob, d/2, 0, 0, 4, 0, alpha(glow, 0.85*lit*breath))  // 内层亮边
+		}
+		pt.Fill(knob, alpha(glow, lit), d/2)
+		if lit < 1 {
+			pt.Stroke(knob, alpha(p.FG, (0.45+0.15*hover)*(1-lit)), d/2, 1)
 		}
 	})
 	return sw
+}
+
+// glowColor 是发光的颜色：强调色，墨色主题下是前景色（暗色里是白光）。
+func (p palette) glowColor() ui.Color {
+	if p.Ink {
+		return p.FG
+	}
+	return p.Accent
 }
 
 // slideMatch 是在一组条目之间滑动的选中块的身份（见 ElementTransition.Match）。
@@ -137,4 +143,34 @@ func cachedSkill(fn func() (bool, string)) func() (bool, string) {
 	}
 	get := cached(time.Second, func() pair { ok, t := fn(); return pair{ok, t} })
 	return func() (bool, string) { p := get(); return p.ok, p.target }
+}
+
+// noticeText 是顶栏里的临时提示：出现时从左侧淡入，消失时淡出，内容变化时交叉淡化。
+func (w *workbench) noticeLabel(c *ui.Context, col ui.Color) ui.Element {
+	return ui.Text(c.Key("notice"), w.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0).
+		ContentTransition(ui.ContentTransition{}).
+		Transition(ui.ElementTransition{Duration: 180 * time.Millisecond, Enter: &ui.Motion{X: -6}, Exit: &ui.Motion{}})
+}
+
+// popIn 让弹出层出现时从 96% 放大并淡入（第一次构建时播放一次，只重绘）。
+func popIn(e ui.Element) ui.Element {
+	k := e.Keyframes("pop", []ui.Keyframe{{Value: 0}, {At: 160 * time.Millisecond, Value: 1, Ease: ui.EaseOut}})
+	if k < 1 {
+		e.TransformOrigin(0.5, 0).Opacity(k).Scale(0.96+0.04*k, 0.96+0.04*k)
+	}
+	return e
+}
+
+// enterOnce 是元素第一次出现时的入场进度（0→1），delay 用来错开一组元素。
+// 只在第一次构建时播放；之后一直是 1，不再请求帧。
+func enterOnce(e ui.Element, d, delay time.Duration) float32 {
+	return e.Keyframes("enter", []ui.Keyframe{{Value: 0}, {At: d, Value: 1, Ease: ui.EaseOut}}, ui.KeyframeOptions{Delay: delay})
+}
+
+// riseIn 让元素第一次出现时淡入并上浮几个点（错开 delay）。
+func riseIn(e ui.Element, delay time.Duration) ui.Element {
+	if k := enterOnce(e, 320*time.Millisecond, delay); k < 1 {
+		e.Opacity(k).Translate(0, (1-k)*8)
+	}
+	return e
 }

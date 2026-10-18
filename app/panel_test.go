@@ -120,7 +120,7 @@ func mainQueue() chan func() {
 func TestPanelRendersVisibleSwitches(t *testing.T) {
 	p, _ := newTestPanel(sampleViews())
 	tt := ui.NewTester(p.view, 340, 520)
-	for _, want := range []string{"SimpleToggle", "2 ON", "Dark Mode", "Keep Awake", "Wi-Fi", "Flush DNS"} {
+	for _, want := range []string{"simpletoggle", "2 ON", "Dark Mode", "Keep Awake", "Wi-Fi", "Flush DNS"} {
 		if !tt.HasText(want) {
 			t.Errorf("missing %q in %q", want, tt.Texts())
 		}

@@ -150,16 +150,20 @@ func (s *settingsWin) render(c *ui.Context) {
 		})
 		ui.Column(c.Key("st-main")).Grow(1).MinWidth(0).FillHeight().Background(pal.BG).BorderWidth(0, 0, 0, 1).BorderColor(pal.L2).Children(func() {
 			ui.Row(c).FillWidth().Height(46).Shrink(0).Padding(0, 22).Gap(10).AlignItems(ui.Center).DragWindow().Children(func() {
-				ui.Text(c, tr("st_"+s.tab)).FontSize(13).FontWeight(600).TextColor(pal.T1).Grow(1)
+				ui.Text(c.Key("st-title"), tr("st_"+s.tab)).FontSize(13).FontWeight(600).TextColor(pal.T1).Grow(1).
+					ContentTransition(ui.ContentTransition{})
 				if s.notice != "" {
 					col := pal.T2
 					if s.noticeErr {
 						col = pal.Red
 					}
-					ui.Text(c, s.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0)
+					ui.Text(c.Key("st-notice"), s.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0).
+						ContentTransition(ui.ContentTransition{}).
+						Transition(ui.ElementTransition{Duration: 180 * time.Millisecond, Enter: &ui.Motion{X: -6}, Exit: &ui.Motion{}})
 				}
 			})
-			ui.Scroll(c.Key("st-body-" + s.tab)).FillWidth().Grow(1).MinHeight(0).Children(func() {
+			// 每个分区一个页面：切换时淡入并轻轻上移
+			ui.Scroll(c.Key("st-body-" + s.tab)).FillWidth().Grow(1).MinHeight(0).Transition(motionPage).Children(func() {
 				ui.Column(c).FillWidth().Padding(4, 22, 28).Gap(18).Children(func() { s.body(c) })
 			})
 		})

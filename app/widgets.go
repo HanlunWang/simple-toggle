@@ -112,7 +112,19 @@ func (p palette) vhair(c *ui.Context) ui.Element {
 
 // caption 是区块小标题（11px，次级颜色）。
 func (p palette) caption(c *ui.Context, text string) ui.Element {
-	return ui.Text(c, text).FontSize(11).FontWeight(600).TextColor(p.T3).SingleLine()
+	// 终端风格的小标题：等宽、大写、加字距（中文不受大写影响）
+	return ui.Text(c, strings.ToUpper(text)).Font(monoFont).FontSize(10.5).FontWeight(500).LetterSpacing(0.7).
+		TextColor(p.T3).SingleLine()
+}
+
+// count 是侧栏、标题旁的计数：等宽，数字变化时滚动。
+func (p palette) count(c *ui.Context, key string, n int) ui.Element {
+	return p.countText(c, key, itoa(n))
+}
+
+func (p palette) countText(c *ui.Context, key, text string) ui.Element {
+	return ui.Text(c.Key(key), text).Font(monoFont).FontSize(11).TextColor(p.T3).SingleLine().
+		ContentTransition(ui.ContentTransition{Numeric: true})
 }
 
 // hint 是说明文字。
@@ -189,7 +201,10 @@ func (p palette) navItem(c *ui.Context, key, iconName, label string, selected, d
 	return r
 }
 
+// monoFont 是界面里的等宽字体（系统的 SF Mono）。
+const monoFont = "monospace"
+
 // mono 是等宽小字。
 func (p palette) mono(c *ui.Context, text string, size float32, col ui.Color) ui.Element {
-	return ui.Text(c, text).Font("monospace").FontSize(size).TextColor(col).SingleLine()
+	return ui.Text(c, text).Font(monoFont).FontSize(size).TextColor(col).SingleLine()
 }
