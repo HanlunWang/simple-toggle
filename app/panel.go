@@ -145,12 +145,6 @@ func (p *panel) view(c *ui.Context) {
 	}
 	const maxBody = float32(560)
 	var top, inner, bottom ui.Element
-	// 打开时内容从上方 8px 轻轻落下（只重绘，不重新布局）
-	drop := ui.Pose{Y: -8, Scale: 0.985}
-	if p.revealed || p.reveal == nil {
-		drop = ui.Pose{}
-	}
-	root.TransformOrigin(0.5, 0).AnimatePose(drop, ui.Animation{Spring: ui.SpringOptions{Duration: 380 * time.Millisecond, Bounce: 0.12}})
 	root.Children(func() {
 		top = ui.Column(c).FillWidth().Children(func() {
 			p.header(c)

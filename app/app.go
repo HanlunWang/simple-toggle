@@ -116,6 +116,7 @@ func Run() error {
 	mygo.App.WhenReady(c.ready)
 	mygo.App.OnSecondInstance(func([]string, string) { c.togglePanel() })
 	mygo.App.OnOpenURL(func(u string) { mygo.RunOnMain(func() { c.handleDeepLink(u) }) })
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { c.quitting = true })
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) { c.shutdown() })
 	return mygo.App.Run()
 }
@@ -144,6 +145,9 @@ type controller struct {
 	phase    bool
 
 	devPanel bool
+
+	panelClosedAt time.Time // 面板上次关闭的时刻
+	quitting      bool      // 正在退出：窗口直接关闭，不做淡出
 
 	unclean      bool     // 上次没有正常退出
 	crashDesired []string // 上次退出时开着的开关
@@ -321,7 +325,12 @@ func (c *controller) redrawPanel() {
 
 func (c *controller) togglePanel() {
 	if c.flyout != nil {
-		c.flyout.Close()
+		c.closePanel()
+		return
+	}
+	// 面板开着时点菜单栏图标：按下鼠标那一刻面板已因「点在外面」关闭，紧接着图标的点击又会到这里。
+	// 刚关上的这次点击就是「关闭」，不再重新打开（否则面板闪一下又出现）。
+	if time.Since(c.panelClosedAt) < 400*time.Millisecond {
 		return
 	}
 	w := c.prefs.width()
@@ -356,7 +365,8 @@ func (c *controller) togglePanel() {
 		}
 		shown = true
 		p.revealed = true
-		go fadeIn(fl, p.lessMotion)
+		// 整个窗口（连同玻璃材质）从上方 6pt 淡入落下，由 Core Animation 插值
+		darwin.RevealWindow(fl.NativeHandle(), 0.22, 6, p.lessMotion)
 	}
 	p.reveal = func() { go mygo.RunOnMain(reveal) }
 	// 兜底：万一没有等到按真实高度画的那一帧（例如窗口透明时系统不让它绘制），也要显示出来
@@ -370,29 +380,39 @@ func (c *controller) togglePanel() {
 		})
 		return float32(height)
 	}
+	// 点在外面、Esc、点菜单栏图标：都先拦下，淡出后再真正关闭
+	fl.OnClose(func(e *mygo.CloseEvent) {
+		if c.flyout == fl && !c.quitting {
+			e.PreventDefault()
+			c.closePanel()
+		}
+	})
 	fl.OnClosed(func() {
 		if c.flyout == fl {
 			c.flyout = nil
+			c.panelClosedAt = time.Now()
 			c.eng.PanelVisible(false)
 		}
 	})
 	c.eng.PanelVisible(true)
 }
 
-// fadeIn 把面板窗口在约 150ms 内从透明淡入（减弱动态效果时直接显示）。
-func fadeIn(fl *mygo.Window, instant bool) {
-	const d = 150 * time.Millisecond
-	start := time.Now()
-	for !instant {
-		t := float64(time.Since(start)) / float64(d)
-		if t >= 1 {
-			break
-		}
-		a := 1 - (1-t)*(1-t)*(1-t) // ease-out
-		mygo.RunOnMain(func() { fl.SetOpacity(a) })
-		time.Sleep(8 * time.Millisecond)
+// closePanel 让面板淡出后关闭（主线程）。从这一刻起面板就算关了：
+// 紧跟着到来的菜单栏图标点击不会再把它打开。
+func (c *controller) closePanel() {
+	fl := c.flyout
+	if fl == nil {
+		return
 	}
-	mygo.RunOnMain(func() { fl.SetOpacity(1) })
+	c.flyout = nil
+	c.panelClosedAt = time.Now()
+	c.eng.PanelVisible(false)
+	d := 120 * time.Millisecond
+	if c.panel.lessMotion {
+		d = 0
+	}
+	darwin.FadeOutWindow(fl.NativeHandle(), d.Seconds())
+	time.AfterFunc(d+10*time.Millisecond, func() { mygo.RunOnMain(fl.Close) })
 }
 
 // estimateHeight 是面板首次打开时的高度估计；第一帧之后按实际内容校正。
