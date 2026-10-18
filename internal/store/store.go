@@ -2,6 +2,7 @@
 //
 //	state.json   期望状态、隐藏列表、参数值、预置脚本投放记账、开关元数据、设置
 //	runs.jsonl   运行记录，一行一条，按保留天数清理
+//	usage.json   按天汇总的使用次数（用量统计，保留 400 天）
 //
 // 数据量很小（几十个开关、几千条记录），JSON 比数据库更简单透明，也方便导入导出。
 // 写入用「临时文件 + rename」保证原子性；只有引擎一个写入者（app 单实例）。
@@ -83,6 +84,8 @@ type Store struct {
 	runs      []Run
 	nextID    int64
 	retention time.Duration
+	usage     Usage
+	fileRuns  int // runs.jsonl 里的行数（上次重写以来追加的也算）
 }
 
 // Open 读取 dir 下的数据；目录或文件不存在时从空状态开始。
@@ -105,6 +108,7 @@ func Open(dir string) (*Store, error) {
 	if err := s.loadRuns(); err != nil {
 		return nil, err
 	}
+	s.loadUsage()
 	return s, nil
 }
 
@@ -328,10 +332,12 @@ func (s *Store) loadRuns() error {
 	if stale {
 		return s.rewriteRunsLocked()
 	}
+	s.fileRuns = len(s.runs)
 	return nil
 }
 
 func (s *Store) rewriteRunsLocked() error {
+	s.fileRuns = len(s.runs)
 	var buf []byte
 	for _, r := range s.runs {
 		line, _ := json.Marshal(r)
@@ -359,6 +365,11 @@ func (s *Store) AppendRun(r Run) (Run, error) {
 	if len(s.runs) > MaxRecentRuns {
 		s.runs = s.runs[len(s.runs)-MaxRecentRuns:]
 	}
+	if Countable(r) {
+		s.usage.add(r)
+		s.usage.prune(r.Time)
+		_ = s.saveUsageLocked()
+	}
 	line, err := json.Marshal(r)
 	if err != nil {
 		return r, err
@@ -369,7 +380,24 @@ func (s *Store) AppendRun(r Run) (Run, error) {
 	}
 	defer f.Close()
 	_, err = f.Write(append(line, '\n'))
+	s.fileRuns++
+	// app 一开就是几周：文件里的行数到了内存上限的两倍，就按保留时长与条数上限重写一次，
+	// 不让文件只增不减（平时只追加，重写的频率很低）
+	if err == nil && s.fileRuns > 2*MaxRecentRuns {
+		f.Close()
+		s.pruneRetentionLocked(time.Now())
+		err = s.rewriteRunsLocked()
+	}
 	return r, err
+}
+
+// pruneRetentionLocked 丢掉保留时长以前的记录（内存里按时间排列）。
+func (s *Store) pruneRetentionLocked(now time.Time) {
+	cutoff := now.Add(-s.retention)
+	i := sort.Search(len(s.runs), func(i int) bool { return !s.runs[i].Time.Before(cutoff) })
+	if i > 0 {
+		s.runs = append([]Run(nil), s.runs[i:]...)
+	}
 }
 
 // Runs 按时间倒序返回符合条件的记录。
@@ -401,6 +429,8 @@ func (s *Store) ClearRuns() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runs = nil
+	s.usage = Usage{}
+	_ = s.saveUsageLocked()
 	return s.rewriteRunsLocked()
 }
 

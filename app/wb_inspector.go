@@ -485,7 +485,7 @@ func (w *workbench) menubarView(c *ui.Context, d *doc) {
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 		ui.Text(c, tr("mb_countdown")).FontSize(12.5).TextColor(pal.T1).Grow(1)
 		before := cd
-		ui.Switch(c.Key("mb-cd"), &cd).Label(tr("mb_countdown"))
+		w.pal.toggle(c, "mb-cd", &cd, false, false).Label(tr("mb_countdown"))
 		if cd != before {
 			m := *h.MenuBar
 			m.Countdown = cd
@@ -514,7 +514,7 @@ func (w *workbench) behaviorView(c *ui.Context, v engine.View) {
 	if v.Type == contract.Action {
 		row(tr("b_confirm"), func() {
 			on := v.Meta.Confirm
-			ui.Switch(c.Key("b-confirm"), &on).Label(tr("b_confirm"))
+			w.pal.toggle(c, "b-confirm", &on, false, false).Label(tr("b_confirm"))
 			if on != v.Meta.Confirm {
 				m := v.Meta
 				m.Confirm = on
@@ -570,7 +570,7 @@ func (w *workbench) behaviorView(c *ui.Context, v engine.View) {
 	})
 	row(tr("b_hidden"), func() {
 		hidden := v.Hidden
-		ui.Switch(c.Key("b-hidden"), &hidden).Label(tr("b_hidden"))
+		w.pal.toggle(c, "b-hidden", &hidden, false, false).Label(tr("b_hidden"))
 		if hidden != v.Hidden {
 			_ = w.b.SetHidden(v.ID, hidden)
 			w.dirty = true

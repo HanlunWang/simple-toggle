@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/HanlunWang/simple-toggle/internal/automation"
+	"github.com/HanlunWang/simple-toggle/internal/contract"
 	"github.com/HanlunWang/simple-toggle/internal/engine"
 	"github.com/HanlunWang/simple-toggle/internal/store"
 	"github.com/egoist/mygo/ui"
@@ -23,6 +24,7 @@ func TestSnapshots(t *testing.T) {
 		t.Skip("set OT_SNAPSHOT_DIR to render snapshots")
 	}
 	save := func(tt *ui.Tester, name string) {
+		tt.Advance(time.Second) // 让过渡动画走完
 		f, err := os.Create(filepath.Join(dir, name+".png"))
 		if err != nil {
 			t.Fatal(err)
@@ -77,9 +79,25 @@ func TestSnapshots(t *testing.T) {
 		b.mu.Unlock()
 		w.handle(engine.Event{Kind: engine.EventRun})
 		w.open(secActivity, "")
-		w.runSel = 1
+		w.actTab, w.runSel = 1, 1
 		tt.Frame()
 		save(tt, "activity"+suffix)
+		// 概览：用 120 天的模拟记录
+		b.mu.Lock()
+		b.runs = fakeUsageRuns(time.Now())
+		b.mu.Unlock()
+		w.handle(engine.Event{Kind: engine.EventRun})
+		w.actTab = 0
+		tt.Frame()
+		save(tt, "stats"+suffix)
+		w.statRange, w.statItem = 3, "awake.sh"
+		tt.Frame()
+		save(tt, "stats-item"+suffix)
+		w.statRange, w.statItem = 1, ""
+		tt.SetSize(1180, 1300)
+		tt.Frame()
+		save(tt, "stats-full"+suffix)
+		tt.SetSize(1180, 760)
 
 		// 场景与自动化
 		a := &fakeAuto{issues: map[string]automation.ShortcutIssue{"scene:focus": {Kind: "taken"}}}
@@ -132,6 +150,7 @@ func TestSnapshotsM5(t *testing.T) {
 		t.Skip("set OT_SNAPSHOT_DIR to render snapshots")
 	}
 	save := func(tt *ui.Tester, name string) {
+		tt.Advance(time.Second) // 让过渡动画走完
 		f, err := os.Create(filepath.Join(dir, name+".png"))
 		if err != nil {
 			t.Fatal(err)
@@ -192,4 +211,74 @@ func TestSnapshotsM5(t *testing.T) {
 		wt.Frame()
 		save(wt, "changes"+suffix)
 	}
+}
+
+// TestSnapshotsPanel 渲染面板的几种布局（默认跳过）。
+func TestSnapshotsPanel(t *testing.T) {
+	dir := os.Getenv("OT_SNAPSHOT_DIR")
+	if dir == "" {
+		t.Skip("set OT_SNAPSHOT_DIR to render snapshots")
+	}
+	save := func(tt *ui.Tester, name string) {
+		tt.Advance(time.Second) // 让过渡动画走完
+		f, err := os.Create(filepath.Join(dir, name+".png"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		png.Encode(f, tt.Image())
+	}
+	views := sampleViews()
+	views[1].Params = append(views[1].Params,
+		engine.ParamView{Param: contract.Param{Key: "keep", Label: "防休眠", Type: contract.ParamSelect,
+			Options: []contract.Option{{Label: "仅保持屏幕", Value: "d"}, {Label: "仅保持任务", Value: "i"}, {Label: "屏幕与任务", Value: "di"}}}, Value: "d"},
+		engine.ParamView{Param: contract.Param{Key: "interval", Label: "间隔（秒）", Type: contract.ParamNumber,
+			Presets: []contract.Option{{Label: "1 分钟", Value: "60"}, {Label: "4 分钟", Value: "240"}, {Label: "10 分钟", Value: "600"}}}, Value: "240"})
+	for _, dark := range []bool{false, true} {
+		suffix := pick(dark, "-dark", "-light")
+		for _, accent := range []Accent{AccentInk, AccentBlue} {
+			b := &fakeBackend{views: views}
+			p := newPanel(b, Prefs{Accent: accent, Layout: "list", Density: "comfortable", ShowGroups: true})
+			tt := ui.NewTester(p.view, 340, 560)
+			tt.SetDark(dark)
+			tt.Frame()
+			save(tt, "panel-list-"+string(accent)+suffix)
+			p.expanded = "awake.sh"
+			tt.Frame()
+			tt.Advance(500 * time.Millisecond)
+			save(tt, "panel-params-"+string(accent)+suffix)
+			p.expanded = ""
+			p.prefs.Layout = "grid"
+			tt.Frame()
+			tt.Advance(500 * time.Millisecond)
+			save(tt, "panel-grid-"+string(accent)+suffix)
+			p.prefs.Layout, p.prefs.Density = "list", "compact"
+			tt.Frame()
+			tt.Advance(500 * time.Millisecond)
+			save(tt, "panel-compact-"+string(accent)+suffix)
+		}
+	}
+}
+
+// fakeUsageRuns 生成一段看起来真实的使用记录：工作日多、白天多。
+func fakeUsageRuns(now time.Time) []store.Run {
+	var runs []store.Run
+	ids := []struct{ id, name string }{{"awake.sh", "Keep Awake"}, {"flush.sh", "Flush DNS"}, {"dark.sh", "Dark Mode"}, {"scene:focus", "专注"}}
+	srcs := []string{"manual", "manual", "shortcut", "automation", "ai", "scene"}
+	seed := uint32(7)
+	rnd := func(n int) int { seed = seed*1664525 + 1013904223; return int(seed>>8) % n }
+	for d := 0; d < 120; d++ {
+		day := now.AddDate(0, 0, -d)
+		n := rnd(6)
+		if day.Weekday() == time.Saturday || day.Weekday() == time.Sunday {
+			n = rnd(3)
+		}
+		for i := 0; i < n; i++ {
+			it := ids[min(rnd(5), 3)]
+			h := 8 + rnd(12)
+			t := time.Date(day.Year(), day.Month(), day.Day(), h, rnd(60), 0, 0, time.Local)
+			runs = append(runs, store.Run{Time: t, Switch: it.id, Name: it.name, Action: "run", Source: srcs[rnd(len(srcs))], OK: rnd(12) != 0})
+		}
+	}
+	return runs
 }

@@ -246,7 +246,7 @@ func (s *settingsWin) group(c *ui.Context, key, label string, fn func(row rowFn)
 
 func (s *settingsWin) toggle(c *ui.Context, key string, on bool, set func(bool)) {
 	v := on
-	ui.Switch(c.Key(key), &v).Label(key)
+	s.pal.toggle(c, key, &v, false, false).Label(key)
 	if v != on {
 		set(v)
 	}
@@ -307,6 +307,9 @@ func (s *settingsWin) general(c *ui.Context) {
 		})
 		row(tr("restore_state"), tr("restore_state_h"), func() {
 			s.toggle(c, "restore", h.get(keyRestore) != "false", func(v bool) { h.set(keyRestore, boolStr(v)) })
+		})
+		row(tr("confirm_quit"), tr("confirm_quit_h"), func() {
+			s.toggle(c, "confirm-quit", h.get(keyConfirmQuit) != "false", func(v bool) { h.set(keyConfirmQuit, boolStr(v)) })
 		})
 	})
 	s.group(c, "g-feedback", tr("g_feedback"), func(row rowFn) {

@@ -25,9 +25,10 @@ type Prefs struct {
 
 // 其他设置键（不属于界面偏好）。
 const (
-	keyLanguage          = "language" // "" 跟随系统 | zh-Hans | en
-	keyRestore           = "restore"  // 默认 true
-	keyNotify            = "notify"   // never | fail（默认）| always
+	keyLanguage          = "language"    // "" 跟随系统 | zh-Hans | en
+	keyRestore           = "restore"     // 默认 true
+	keyConfirmQuit       = "confirmQuit" // 退出前说明开着的开关会怎样；默认 true
+	keyNotify            = "notify"      // never | fail（默认）| always
 	keyTimeout           = "advanced.timeout"
 	keyShell             = "advanced.shell"
 	keyEnv               = "advanced.env" // JSON 对象

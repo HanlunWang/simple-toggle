@@ -463,12 +463,12 @@ func (c *controller) settingsHost() *settingsHost {
 		token:      c.srv.Token,
 		regenToken: c.srv.RegenerateToken,
 
-		clients:      env.Detect,
+		clients:      cached(time.Second, env.Detect),
 		plan:         env.Plan,
 		apply:        env.Apply,
 		snippet:      integrations.Snippet(env.Bin),
-		cliPath:      cliOnPath,
-		skill:        env.SkillStatus,
+		cliPath:      cached(time.Second, cliOnPath),
+		skill:        cachedSkill(env.SkillStatus),
 		canSkill:     fileExists(filepath.Join(c.skillSource(), "SKILL.md")),
 		installSkill: func() error { return env.InstallSkill(c.skillSource()) },
 
@@ -537,7 +537,7 @@ func (c *controller) settingsHost() *settingsHost {
 
 		copy:          func(text string) { mygo.Clipboard.WriteText(text) },
 		openWorkbench: c.openWorkbench,
-		editors:       installedEditors,
+		editors:       cached(5*time.Second, installedEditors),
 		shortcutIssue: func(key string) string { return c.appShortcutErr[key] },
 		onMain: func(fn func()) {
 			mygo.RunOnMain(func() {
@@ -600,7 +600,7 @@ func (c *controller) openOnboarding() {
 		install:       c.eng.InstallScript,
 		prefs:         func() Prefs { return c.prefs },
 		setPref:       func(name, value string) { c.setSetting("ui."+name, value) },
-		clients:       env.Detect,
+		clients:       cached(time.Second, env.Detect),
 		plan:          env.Plan,
 		apply:         env.Apply,
 		panelShortcut: func() string { return c.st.Setting(keyPanelShortcut) },

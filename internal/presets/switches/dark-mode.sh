@@ -3,10 +3,11 @@
 # <switch.icon> sf:moon.fill
 # <switch.type> toggle
 #
-# Toggles the system appearance via AppleScript. The first invocation
-# triggers a one-time Automation permission prompt (System Events).
-# External changes (Control Center, auto-switching) are picked up by
-# the 5-second status poll.
+# Toggles the system appearance via AppleScript. The first time you
+# switch it, macOS asks once to let SimpleToggle control System Events.
+# `status` only reads the appearance setting, so polling needs no
+# permission; external changes (Control Center, auto-switching) are
+# picked up by the status poll.
 case "$1" in
   on)
     osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true'
@@ -15,7 +16,6 @@ case "$1" in
     osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false'
     ;;
   status)
-    v="$(osascript -e 'tell application "System Events" to tell appearance preferences to get dark mode' 2>/dev/null)"
-    [ "$v" = "true" ] && echo on || echo off
+    [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ] && echo on || echo off
     ;;
 esac

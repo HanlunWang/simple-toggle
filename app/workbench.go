@@ -68,12 +68,19 @@ type workbench struct {
 	busy       map[string]bool // 测试按钮执行中
 
 	// 活动
-	actFilter string
-	runs      []store.Run
-	runsDirty bool
-	runSel    int
-	runList   ui.ListState
-	clearOpen bool
+	actTab       int // 0 概览（统计） 1 记录
+	usage        store.Usage
+	usageDirty   bool
+	statRange    int    // statRanges 的序号
+	statItem     string // 只看这个开关；空 = 全部
+	statHover    string // 图表悬停处的说明
+	statHoverKey string
+	actFilter    string
+	runs         []store.Run
+	runsDirty    bool
+	runSel       int
+	runList      ui.ListState
+	clearOpen    bool
 
 	closeAsk bool // 关闭窗口时有未保存的修改
 
@@ -127,7 +134,7 @@ type outLine struct {
 
 func newWorkbench(b Backend, prefs Prefs) *workbench {
 	return &workbench{
-		b: b, prefs: prefs, section: secSwitches, dirty: true, runsDirty: true,
+		b: b, prefs: prefs, section: secSwitches, dirty: true, runsDirty: true, usageDirty: true, statRange: 1,
 		docs: map[string]*doc{}, fields: map[string]*fieldState{}, outputs: map[string][]outLine{},
 		savedAt: map[string]time.Time{}, busy: map[string]bool{},
 		inspector: true, bottomOpen: true, paramOpen: -1, runSel: 0,
@@ -141,7 +148,7 @@ func newWorkbench(b Backend, prefs Prefs) *workbench {
 	}
 }
 
-func (w *workbench) invalidate() { w.dirty = true; w.runsDirty = true }
+func (w *workbench) invalidate() { w.dirty = true; w.runsDirty = true; w.usageDirty = true }
 
 // handle 处理引擎事件（在主线程调用）。
 func (w *workbench) handle(ev engine.Event) {
@@ -150,7 +157,7 @@ func (w *workbench) handle(ev engine.Event) {
 	case engine.EventReloaded:
 		w.checkDisk()
 	case engine.EventRun:
-		w.runsDirty = true
+		w.runsDirty, w.usageDirty = true, true
 	case engine.EventScene:
 	case engine.EventChange:
 		if ev.Switch != "" {
@@ -180,6 +187,11 @@ func (w *workbench) load() {
 	for id, d := range w.docs {
 		if w.view(id) == nil && !d.modified() {
 			delete(w.docs, id)
+		}
+	}
+	for id := range w.outputs {
+		if w.view(id) == nil {
+			delete(w.outputs, id)
 		}
 	}
 }
@@ -233,20 +245,23 @@ func (w *workbench) render(c *ui.Context) {
 		// 分隔线画在主区（不透明）的左边框上：画在透明的根视图上会透出底下的颜色
 		ui.Column(c.Key("main")).Grow(1).MinWidth(0).FillHeight().Background(pal.BG).
 			BorderWidth(0, 0, 0, 1).BorderColor(pal.L2).Children(func() {
-			switch w.section {
-			case secChanges:
-				w.changeEditor(c)
-			case secScenes:
-				w.sceneEditor(c)
-			case secAutomations:
-				w.ruleEditor(c)
-			case secActivity:
-				w.activity(c)
-			case secLibrary:
-				w.library(c)
-			default:
-				w.switchEditor(c)
-			}
+			// 每个分区一个页面：切换时新页面淡入并轻轻上移
+			ui.Column(c.Key("page-" + w.section)).Fill().MinWidth(0).Transition(motionPage).Children(func() {
+				switch w.section {
+				case secChanges:
+					w.changeEditor(c)
+				case secScenes:
+					w.sceneEditor(c)
+				case secAutomations:
+					w.ruleEditor(c)
+				case secActivity:
+					w.activity(c)
+				case secLibrary:
+					w.library(c)
+				default:
+					w.switchEditor(c)
+				}
+			})
 		})
 	})
 	if w.closeAsk {
@@ -334,7 +349,9 @@ func (w *workbench) sidebar(c *ui.Context) {
 		}
 	})
 	ui.Box(c).FillWidth().Height(1).Margin(0, 14).Background(pal.L2)
-	ui.Scroll(c.Key("side-list")).FillWidth().Grow(1).Padding(2, 8, 8).Children(func() {
+	// 每个分区一个列表容器：切换分区时整组替换（淡入），而不是旧列表逐行收起叠在新列表上
+	ui.Scroll(c.Key("side-list-"+w.section)).FillWidth().Grow(1).Padding(2, 8, 8).
+		Transition(ui.ElementTransition{Duration: 160 * time.Millisecond, Enter: &ui.Motion{}}).Children(func() {
 		switch w.section {
 		case secChanges:
 			w.changeList(c)
@@ -456,23 +473,24 @@ func (w *workbench) switchList(c *ui.Context) {
 		for _, v := range g.views {
 			v := v
 			sel := w.selected == v.ID
-			r := ui.Row(c.Key("sw-"+v.ID)).FillWidth().Height(30).Padding(0, 8).Radius(7).Gap(8).AlignItems(ui.Center).Label(v.Name)
-			if sel {
-				r.Background(pal.L2)
-			} else if r.Hovered() {
-				r.Background(pal.L1)
-			}
+			r := ui.Row(c.Key("sw-"+v.ID)).FillWidth().Height(30).Padding(0, 4, 0, 8).Radius(7).Gap(8).AlignItems(ui.Center).Label(v.Name).
+				Transition(motionRow)
+			r.Background(r.AnimateColor("hover", pick(r.Hovered() && !sel, pal.L1, ui.Transparent), animHover))
 			r.Children(func() {
-				w.stateDot(c, v)
-				col := pal.T1
-				if v.Hidden {
-					col = pal.T3
+				if sel {
+					ui.Box(c.Key("sel")).Absolute().Top(0).Left(0).Fill().PassThrough().Radius(7).Background(pal.L2).
+						Transition(ui.ElementTransition{Animation: &animSlide, Match: slideMatch{"switch-list"}})
 				}
-				ui.Row(c).Width(16).Justify(ui.Center).Children(func() { switchIcon(c, v.Icon, 14).TextColor(pal.T2) })
+				w.stateDot(c, v)
+				col := r.AnimateColor("fg", pick(v.Hidden, pal.T3, pal.T1), animColor)
+				ui.Row(c).Width(16).Justify(ui.Center).Children(func() {
+					switchIcon(c, v.Icon, 14).TextColor(r.AnimateColor("ic", pick(v.Hidden, pal.T3, pal.T2), animColor))
+				})
 				ui.Text(c, v.Name).FontSize(12.5).TextColor(col).SingleLine().Grow(1).MinWidth(0)
 				if d := w.docs[v.ID]; d != nil && d.modified() {
 					ui.Box(c).Size(6, 6).Radius(3).Background(pal.T2).Tooltip(tr("unsaved"))
 				}
+				w.eyeButton(c, v)
 			})
 			if r.Clicked() {
 				w.open(secSwitches, v.ID)
@@ -481,6 +499,38 @@ func (w *workbench) switchList(c *ui.Context) {
 	}
 	if len(w.views) == 0 {
 		ui.Text(c, tr("empty")).FontSize(12).TextColor(pal.T3).Margin(12, 8)
+	}
+}
+
+// eyeButton 是「是否在面板中显示」的开关：睁眼 = 显示，闭眼 = 隐藏，点一下切换。
+// 隐藏时图标常亮并带底色，一眼能看出哪些开关不在面板里。
+func (w *workbench) eyeButton(c *ui.Context, v engine.View) {
+	pal := w.pal
+	tip := pick(v.Hidden, tr("eye_show"), tr("eye_hide"))
+	b := ui.Row(c.Key("eye-"+v.ID)).Size(22, 22).Radius(6).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
+		Tooltip(tip).Label(tip)
+	bg := ui.Transparent
+	switch {
+	case v.Hidden:
+		bg = pal.L2
+	case b.Hovered():
+		bg = pal.L1
+	}
+	b.Background(b.AnimateColor("bg", bg, animHover))
+	col := pal.T3
+	if v.Hidden || b.Hovered() {
+		col = pal.T1
+	}
+	pressPose(b, 0.88)
+	b.Children(func() {
+		icon(c, pick(v.Hidden, "eye-off", "eye"), 13).TextColor(b.AnimateColor("fg", col, animHover)).
+			ContentTransition(ui.ContentTransition{})
+	})
+	if b.Clicked() {
+		if err := w.b.SetHidden(v.ID, !v.Hidden); err != nil {
+			w.setNotice(err.Error(), true)
+		}
+		w.dirty = true
 	}
 }
 

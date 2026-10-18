@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -72,6 +73,9 @@ type Config struct {
 	PollHidden     time.Duration // 后台轮询间隔，默认 30 秒
 	ExtraEnv       func() []string
 	NoRestore      bool // 启动时不恢复上次开着的开关
+	// Guard 在有常驻进程时拉起守护进程（Bin __guard），app 意外退出时由它结束常驻进程。
+	// 只有 app 与 serve 打开；测试里 Bin 是测试二进制，不能这样启动。
+	Guard bool
 }
 
 // Switch 是一个已解析的脚本。
@@ -87,8 +91,10 @@ type rt struct {
 	daemon      *runner.Proc
 	op          sync.Mutex // 同一开关的操作串行执行
 	lastRun     *store.Run
-	busySince   time.Time // action 开始执行的时刻
-	userAt      time.Time // 用户最近一次改动它的时刻（自动化的冲突策略用）
+	// lastRunLoaded：已经从记录里找过最近一次运行（没有也算找过）
+	lastRunLoaded bool
+	busySince     time.Time // action 开始执行的时刻
+	userAt        time.Time // 用户最近一次改动它的时刻（自动化的冲突策略用）
 }
 
 // Engine 是开关管理器。所有方法并发安全。
@@ -115,6 +121,9 @@ type Engine struct {
 
 	sceneOp    sync.Mutex             // 场景串行执行
 	sceneState map[string]*sceneState // 激活中的场景（激活前状态与目标状态）
+
+	guardMu sync.Mutex
+	guard   *exec.Cmd
 }
 
 func New(cfg Config) *Engine {
@@ -184,6 +193,7 @@ func (e *Engine) Shutdown() {
 	}
 	wg.Wait()
 	_ = os.Remove(e.cfg.LedgerPath)
+	e.stopGuard()
 }
 
 // SetDefaults 修改默认超时与没有 shebang 时使用的 shell（设置里改动后立即生效）。
@@ -546,6 +556,7 @@ func (e *Engine) spawn(sw *Switch, r *rt, src Source, detail string) {
 	r.daemon = p
 	e.mu.Unlock()
 	e.writeLedger()
+	e.ensureGuard()
 	e.setState(sw.ID, On, p.Started)
 	e.record(sw, "start", src, detail, runner.Result{})
 	go e.superviseDaemon(sw.ID, p)

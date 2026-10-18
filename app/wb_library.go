@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -120,9 +121,12 @@ func (w *workbench) library(c *ui.Context) {
 	}
 	ui.Row(c).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		sc := ui.Scroll(c.Key("lib-scroll")).Grow(1).MinWidth(0).FillHeight().Padding(20)
-		width := sc.Bounds().W - 40 // 上一帧的宽度
-		if width <= 0 {
-			width = 700
+		// 列数按这一帧的窗口宽度算（侧栏 236 + 分隔线、抽屉 380 + 分隔线、左右留白 40），
+		// 不读上一帧的尺寸：否则切到脚本库的第一帧会按默认宽度画，再突然缩小
+		winW, _ := c.Size()
+		width := winW - 237 - 40
+		if cur != nil {
+			width -= 381
 		}
 		sc.Children(func() {
 			ui.Grid(c.Key("lib-grid")).FillWidth().Columns(max(1, int((width+10)/220))).Gap(10).Children(func() {
@@ -141,15 +145,18 @@ func (w *workbench) library(c *ui.Context) {
 func (w *workbench) libCard(c *ui.Context, e libEntry) {
 	pal := w.pal
 	sel := w.libSel == e.File
-	card := ui.Column(c.Key("lib-" + e.File)).MinHeight(128).Padding(14).Radius(12).Gap(8).Label(e.header.Name)
-	if sel {
-		card.Border(1.5, pal.L4).Background(pal.L1)
-	} else {
-		card.Border(1, pal.L2)
-		if card.Hovered() {
-			card.Background(pal.L1)
-		}
+	card := ui.Column(c.Key("lib-" + e.File)).MinHeight(128).Padding(14).Radius(12).Gap(8).Label(e.header.Name).
+		Transition(ui.ElementTransition{Duration: 220 * time.Millisecond, Ease: ui.EaseInOut, Position: true, Size: true,
+			Enter: &ui.Motion{Scale: 0.96}, Exit: &ui.Motion{Scale: 0.96}})
+	bg, border := ui.Transparent, pal.L2
+	switch {
+	case sel:
+		bg, border = pal.L1, pal.L4
+	case card.Hovered():
+		bg, border = pal.L1, pal.L3
 	}
+	card.Background(card.AnimateColor("bg", bg, animHover)).Border(pick(sel, float32(1.5), 1), card.AnimateColor("bd", border, animHover))
+	pressPose(card, 0.985)
 	card.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			switchIcon(c, e.header.Icon, 17).TextColor(pal.T1)
@@ -185,7 +192,8 @@ var libPreview = map[string]*editor.State{}
 
 func (w *workbench) libDrawer(c *ui.Context, e libEntry) {
 	pal := w.pal
-	ui.Column(c.Key("drawer")).Width(380).Shrink(0).FillHeight().Background(pal.BG).Children(func() {
+	ui.Column(c.Key("drawer")).Width(380).Shrink(0).FillHeight().Background(pal.BG).
+		Transition(ui.ElementTransition{Duration: 200 * time.Millisecond, Enter: &ui.Motion{X: 24}}).Children(func() {
 		ui.Row(c).FillWidth().Height(46).Shrink(0).Padding(0, 12, 0, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 			switchIcon(c, e.header.Icon, 15).TextColor(pal.T1)
 			ui.Text(c, e.header.Name).FontSize(13).FontWeight(500).TextColor(pal.T1).Grow(1).SingleLine()

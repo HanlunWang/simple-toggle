@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -49,7 +51,10 @@ func (p palette) button(c *ui.Context, key, label, iconName string, kind btnKind
 	}
 	if disabled {
 		b.Opacity(0.45)
+	} else {
+		pressPose(b, 0.96)
 	}
+	b.Transition(motionColors)
 	b.Children(func() {
 		if iconName != "" {
 			icon(c, iconName, 13).TextColor(fg)
@@ -67,13 +72,10 @@ func clicked(b ui.Element, disabled bool) bool { return !disabled && b.Clicked()
 // iconBtn 是 26×26 的图标按钮；active 时有底色。
 func (p palette) iconBtn(c *ui.Context, key, name, tip string, active bool) ui.Element {
 	b := ui.Row(c.Key(key)).Size(26, 26).Radius(7).AlignItems(ui.Center).Justify(ui.Center).Tooltip(tip).Label(tip)
-	if active || b.Hovered() {
-		b.Background(p.L2)
-	}
-	col := p.T2
-	if active || b.Hovered() {
-		col = p.T1
-	}
+	on := active || b.Hovered()
+	b.Background(b.AnimateColor("bg", pick(on, p.L2, ui.Transparent), animHover))
+	col := b.AnimateColor("fg", pick(on, p.T1, p.T2), animHover)
+	pressPose(b, 0.92)
 	b.Children(func() { icon(c, name, 14).TextColor(col) })
 	return b
 }
@@ -119,19 +121,31 @@ func (p palette) hint(c *ui.Context, text string) ui.Element {
 }
 
 // segmented 是等宽分段控件；返回新选中的序号（未变化时与 selected 相同）。
+// 选中块由轨道自己画，在分段之间用弹簧滑动。
 func (p palette) segmented(c *ui.Context, key string, selected int, labels ...string) int {
 	out := selected
-	ui.Row(c.Key(key)).FillWidth().Height(26).Padding(2).Radius(7).Background(p.L2).Gap(2).Children(func() {
+	n := len(labels)
+	track := ui.Row(c.Key(key)).FillWidth().Height(26).Padding(2).Radius(7).Background(p.L2).Gap(2)
+	pos := track.AnimateTo("thumb", float32(selected), animSlide)
+	track.Draw(func(pt *ui.Painter, r ui.Rect) {
+		if n == 0 || selected < 0 {
+			return
+		}
+		const pad, gap = 2, 2
+		w := (r.W - 2*pad - float32(n-1)*gap) / float32(n)
+		x := r.X + pad + pos*(w+gap)
+		thumb := ui.Rect{X: x, Y: r.Y + pad, W: w, H: r.H - 2*pad}
+		pt.Shadow(thumb, 5, 0, 1, 2, 0, alpha(p.FG, 0.12))
+		pt.Fill(thumb, p.BG, 5)
+	})
+	track.Children(func() {
 		for i, l := range labels {
 			s := ui.Row(c.Key(i)).Grow(1).Basis(0).FillHeight().Radius(5).AlignItems(ui.Center).Justify(ui.Center).Label(l)
 			col := p.T2
-			if i == selected {
-				s.Background(p.BG).Shadow(0, 1, 2, 0, alpha(p.FG, 0.12))
-				col = p.T1
-			} else if s.Hovered() {
+			if i == selected || s.Hovered() {
 				col = p.T1
 			}
-			s.Children(func() { ui.Text(c, l).FontSize(12).TextColor(col).SingleLine() })
+			s.Children(func() { ui.Text(c, l).FontSize(12).TextColor(s.AnimateColor("fg", col, animHover)).SingleLine() })
 			if s.Clicked() {
 				out = i
 			}
@@ -143,11 +157,7 @@ func (p palette) segmented(c *ui.Context, key string, selected int, labels ...st
 // navItem 是侧栏的一行：图标、文字、右侧计数或附件。
 func (p palette) navItem(c *ui.Context, key, iconName, label string, selected, dim bool, trailing func()) ui.Element {
 	r := ui.Row(c.Key(key)).FillWidth().Height(28).Padding(0, 8).Radius(7).Gap(9).AlignItems(ui.Center).Label(label)
-	if selected {
-		r.Background(p.L2)
-	} else if r.Hovered() {
-		r.Background(p.L1)
-	}
+	r.Background(r.AnimateColor("hover", pick(r.Hovered() && !selected, p.L1, ui.Transparent), animHover))
 	col := p.T2
 	if selected {
 		col = p.T1
@@ -155,7 +165,16 @@ func (p palette) navItem(c *ui.Context, key, iconName, label string, selected, d
 	if dim {
 		col = p.T3
 	}
+	col = r.AnimateColor("fg", col, animHover)
 	r.Children(func() {
+		if selected { // 选中底色在同一组的条目之间滑动（组 = key 的前缀）
+			group := key
+			if i := strings.IndexByte(key, '-'); i > 0 {
+				group = key[:i]
+			}
+			ui.Box(c.Key("sel")).Absolute().Top(0).Left(0).Fill().PassThrough().Radius(7).Background(p.L2).
+				Transition(ui.ElementTransition{Animation: &animSlide, Match: slideMatch{group}})
+		}
 		if iconName != "" {
 			icon(c, iconName, 15).TextColor(col)
 		}

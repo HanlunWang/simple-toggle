@@ -386,7 +386,7 @@ func (w *workbench) switchEditor(c *ui.Context) {
 		}
 	})
 	if v != nil && v.Type == contract.Daemon && v.State == engine.On && w.bottomOpen && w.bottomTab == 0 {
-		c.After(700 * time.Millisecond) // 常驻进程的输出持续刷新
+		c.After(time.Second) // 常驻进程的输出持续刷新
 	}
 	if t, ok := w.savedAt[d.id]; ok {
 		if r := time.Until(t.Add(1600 * time.Millisecond)); r > 0 {
@@ -483,10 +483,7 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 			w.inspector = !w.inspector
 		}
 		modified := d.modified()
-		sb := ui.Row(c.Key("save-wrap")).Children(func() {
-			pal.button(c, "save", tr("save")+"  ⌘S", "", btnPrimary, !modified)
-		})
-		if modified && sb.Clicked() {
+		if clicked(pal.button(c, "save", tr("save")+"  ⌘S", "", btnPrimary, !modified), !modified) {
 			w.save(d)
 		}
 	})
@@ -588,14 +585,27 @@ func (w *workbench) outputView(c *ui.Context, d *doc) {
 	if len(lines) == 0 {
 		ui.Text(c, tr("output_ready")).FontSize(12).TextColor(pal.T3).Margin(4, 0)
 	}
+	// 只显示最后 maxOutRows 行：常驻进程的输出（最多 64KB）每秒刷新，不必每次都排几千行
+	lines = tailLines(c, pal, lines, "o")
 	for i, l := range lines {
 		w.outRow(c, "o-"+itoa(i), l)
 	}
 	if out, running := w.b.DaemonOutput(d.id); running {
-		for i, l := range outputLines(out) {
+		for i, l := range tailLines(c, pal, outputLines(out), "live") {
 			w.outRow(c, "live-"+itoa(i), l)
 		}
 	}
+}
+
+const maxOutRows = 200
+
+// tailLines 返回最后 maxOutRows 行；截掉了的话先显示一行说明。
+func tailLines(c *ui.Context, pal palette, lines []outLine, key string) []outLine {
+	if len(lines) <= maxOutRows {
+		return lines
+	}
+	ui.Text(c.Key(key+"-more"), fmt.Sprintf(tr("out_earlier"), len(lines)-maxOutRows)).FontSize(11).TextColor(pal.T3).Margin(2, 0)
+	return lines[len(lines)-maxOutRows:]
 }
 
 func (w *workbench) outRow(c *ui.Context, key string, l outLine) {

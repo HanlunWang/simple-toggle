@@ -33,6 +33,7 @@ type Backend interface {
 	DaemonOutput(id string) (string, bool)
 	Runs(f store.Filter) []store.Run
 	ClearRuns() error
+	Usage() store.Usage
 	SetMeta(id string, m store.Meta) error
 
 	// 场景

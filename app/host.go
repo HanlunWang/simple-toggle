@@ -22,7 +22,15 @@ func (appHost) UnregisterShortcut(accel string) { mygo.GlobalShortcut.Unregister
 func (appHost) Watch(path string, fn func()) (func(), error) {
 	path = expandHome(path)
 	ctx, cancel := context.WithCancel(context.Background())
-	w, err := mygo.WatchFiles(ctx, path, mygo.FileWatchOptions{Recursive: true, Debounce: 500 * time.Millisecond, MaxDelay: 2 * time.Second})
+	// 规则只需要知道「有变化」：HintsOnly 不给整棵目录树做快照、也不逐个读取文件信息，
+	// 监听很大的目录（甚至 ~）也不占内存、不会碰到受保护的文件夹
+	w, err := mygo.WatchFiles(ctx, path, mygo.FileWatchOptions{
+		Recursive: true, HintsOnly: true, Debounce: 500 * time.Millisecond, MaxDelay: 2 * time.Second,
+		Ignore: func(p string, isDir bool) bool {
+			base := filepath.Base(p)
+			return isDir && (base == ".git" || base == "node_modules")
+		},
+	})
 	if err != nil {
 		cancel()
 		return nil, err

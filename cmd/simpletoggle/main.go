@@ -31,6 +31,10 @@ import (
 )
 
 func main() {
+	// 守护进程：在其他任何初始化之前分派，保持它尽量小
+	if len(os.Args) > 1 && os.Args[1] == engine.GuardCommand {
+		os.Exit(engine.RunGuard(os.Args[2:]))
+	}
 	if v := mygo.App.Version(); v != "" {
 		version.Version = v
 	}
@@ -111,7 +115,7 @@ func serve(args []string) error {
 	}
 	eng := engine.New(engine.Config{
 		ScriptsDir: paths.Scripts(), LedgerPath: paths.Ledger(), Bin: exe, Store: st,
-		Trash: darwin.Trash, WatchInterval: 2 * time.Second,
+		Trash: darwin.Trash, WatchInterval: 2 * time.Second, Guard: true,
 	})
 	if seed {
 		if err := eng.Seed(presets.All()); err != nil {

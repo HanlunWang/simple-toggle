@@ -221,6 +221,14 @@ func TestLibraryAndActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
+	// 默认是概览；点「记录」看运行记录
+	if !tt.HasText(tr("st_title")) {
+		t.Fatalf("overview not shown: %q", tt.Texts())
+	}
+	if err := tt.Click(tr("st_records")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
 	for _, want := range []string{tr("col_switch"), "mcp/claude", sourceLabel("ai"), tr("f_failed")} {
 		if !tt.HasText(want) {
 			t.Errorf("activity missing %q: %q", want, tt.Texts())
@@ -253,5 +261,29 @@ func TestDiskChangeReloadsCleanDocs(t *testing.T) {
 	tt.Frame()
 	if !d.conflict || d.header.Name != "Mine" || !tt.HasText(tr("disk_changed")) {
 		t.Fatalf("conflict: %v %q", d.conflict, d.header.Name)
+	}
+}
+
+func TestSidebarEyeTogglesPanelVisibility(t *testing.T) {
+	w, b, tt, _ := newTestWorkbench(t)
+	if err := tt.Click(tr("eye_hide")); err != nil { // 第一个开关（Flush DNS）当前在面板中显示
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !b.has("hidden flush.sh true") {
+		t.Fatalf("calls %v", b.calls)
+	}
+	if w.selected != "awake.sh" {
+		t.Fatalf("eye click changed the selection to %q", w.selected)
+	}
+	if !tt.HasText(tr("eye_show")) {
+		t.Fatalf("hidden state not shown: %q", tt.Texts())
+	}
+	if err := tt.Click(tr("eye_show")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !b.has("hidden flush.sh false") {
+		t.Fatalf("calls %v", b.calls)
 	}
 }

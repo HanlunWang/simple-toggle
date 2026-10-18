@@ -144,7 +144,7 @@ func (o *onboarding) intro(c *ui.Context) {
 		card("t-toggle", "type_toggle", "ob_t_toggle", func() {
 			icon(c, "moon", 16).TextColor(pal.T1)
 			ui.Text(c, "Dark Mode").FontSize(13).TextColor(pal.T1).SingleLine().Grow(1).MinWidth(0)
-			ui.Switch(c.Key("demo-sw"), &o.demoOn).Label("Dark Mode")
+			pal.toggle(c, "demo-sw", &o.demoOn, false, false).Label("Dark Mode")
 		})
 		card("t-daemon", "type_daemon", "ob_t_daemon", func() {
 			col := pal.Accent

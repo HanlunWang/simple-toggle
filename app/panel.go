@@ -48,8 +48,14 @@ type panel struct {
 	openSettings  func()
 	requestAX     func()
 	quit          func()
-	resize        func(height float32)
-	lastHeight    float32
+	// resize 把面板调到给定高度，返回实际采用的高度（受屏幕工作区限制）
+	resize     func(height float32) float32
+	lastHeight float32
+	targetH    float32
+	// reveal 在面板第一次按真实高度画好之后调用：窗口从透明淡入（避免先按估计高度出现再跳动）
+	reveal     func()
+	revealed   bool
+	lessMotion bool // 系统「减弱动态效果」
 }
 
 func newPanel(b Backend, prefs Prefs) *panel {
@@ -124,6 +130,7 @@ func (p *panel) onCount() int {
 
 func (p *panel) view(c *ui.Context) {
 	p.load()
+	p.lessMotion = c.Preferences().ReduceMotion
 	base := c.Theme()
 	p.pal = newPalette(base.Dark, p.prefs.Accent)
 	c.SetTheme(p.pal.theme(base))
@@ -138,6 +145,12 @@ func (p *panel) view(c *ui.Context) {
 	}
 	const maxBody = float32(560)
 	var top, inner, bottom ui.Element
+	// 打开时内容从上方 8px 轻轻落下（只重绘，不重新布局）
+	drop := ui.Pose{Y: -8, Scale: 0.985}
+	if p.revealed || p.reveal == nil {
+		drop = ui.Pose{}
+	}
+	root.TransformOrigin(0.5, 0).AnimatePose(drop, ui.Animation{Spring: ui.SpringOptions{Duration: 380 * time.Millisecond, Bounce: 0.12}})
 	root.Children(func() {
 		top = ui.Column(c).FillWidth().Children(func() {
 			p.header(c)
@@ -150,7 +163,7 @@ func (p *panel) view(c *ui.Context) {
 			if p.needsAX && !p.axTrusted() {
 				p.axBanner(c)
 			}
-			ui.Column(c).FillWidth().Height(1).Margin(0, 12).Background(pal.L2)
+			ui.Column(c.Key("top-hair")).FillWidth().Height(1).Margin(0, 12).Background(pal.L2)
 		})
 		ui.Scroll(c).FillWidth().Grow(1).Children(func() {
 			inner = ui.Column(c).FillWidth().Children(func() { p.body(c) })
@@ -166,8 +179,16 @@ func (p *panel) view(c *ui.Context) {
 		h := top.Bounds().H + min(inner.Bounds().H, maxBody) + bottom.Bounds().H
 		if math.Abs(float64(h-p.lastHeight)) > 0.5 {
 			p.lastHeight = h
-			p.resize(h)
+			p.targetH = p.resize(h)
 		}
+		// 窗口已经是这个高度、并且按它画过一帧：可以显示了
+		if !p.revealed && p.reveal != nil && p.targetH > 0 && math.Abs(float64(root.Bounds().H-p.targetH)) < 1.5 {
+			p.revealed = true
+			p.reveal()
+		}
+	}
+	if !p.revealed && p.reveal != nil {
+		c.After(16 * time.Millisecond) // 等窗口调整尺寸后的那一帧
 	}
 	for _, v := range p.views {
 		if v.Remaining != nil {
@@ -213,16 +234,7 @@ func (p *panel) header(c *ui.Context) {
 
 func (p *panel) iconButton(c *ui.Context, key, name, tip string, active bool) ui.Element {
 	pal := p.pal
-	b := ui.Row(c.Key(key)).Size(26, 26).Radius(7).AlignItems(ui.Center).Justify(ui.Center).Tooltip(tip).Label(tip)
-	if active || b.Hovered() {
-		b.Background(pal.L2)
-	}
-	color := pal.T2
-	if active || b.Hovered() {
-		color = pal.T1
-	}
-	b.Children(func() { icon(c, name, 14).TextColor(color) })
-	return b
+	return pal.iconBtn(c, key, name, tip, active)
 }
 
 func (p *panel) searchField(c *ui.Context) {
@@ -293,13 +305,10 @@ func (p *panel) body(c *ui.Context) {
 		for _, g := range p.groups(list) {
 			name, views := g.name, g.views
 			if name != "" {
-				h := ui.Row(c.Key("grp-"+name)).FillWidth().Padding(10, 10, 4).Gap(6).AlignItems(ui.Center)
+				h := ui.Row(c.Key("grp-"+name)).FillWidth().Height(28).Padding(4, 10, 0).Gap(6).AlignItems(ui.Center)
 				h.Children(func() {
-					chev := "chevron-down"
-					if p.collapsed[name] {
-						chev = "chevron-right"
-					}
-					icon(c, chev, 11).TextColor(pal.T3)
+					turn := h.AnimateTo("turn", 90*(1-b2f(p.collapsed[name])), animColor)
+					icon(c, "chevron-right", 11).TextColor(pal.T3).Rotate(turn)
 					ui.Text(c, name).FontSize(11).FontWeight(600).TextColor(pal.T3)
 					ui.Spacer(c)
 					if p.collapsed[name] {
@@ -315,21 +324,25 @@ func (p *panel) body(c *ui.Context) {
 				if h.Clicked() {
 					p.collapsed[name] = !p.collapsed[name]
 				}
-				if p.collapsed[name] {
-					continue
-				}
 			}
-			if p.prefs.Layout == "grid" {
-				ui.Grid(c).FillWidth().Columns(2).Gap(6).Padding(4, 6, 6).Children(func() {
-					for _, v := range views {
-						p.tile(c, v)
-					}
-				})
+			// 分组内容：折叠时收拢，展开时长出
+			key := "grp-body-" + name
+			if p.collapsed[name] {
 				continue
 			}
-			for _, v := range views {
-				p.row(c, v)
-			}
+			ui.Column(c.Key(key)).FillWidth().Transition(motionReveal).Children(func() {
+				if p.prefs.Layout == "grid" {
+					ui.Grid(c).FillWidth().Columns(2).Gap(6).Padding(4, 6, 6).Children(func() {
+						for _, v := range views {
+							p.tile(c, v)
+						}
+					})
+					return
+				}
+				for _, v := range views {
+					p.row(c, v)
+				}
+			})
 		}
 	})
 }
@@ -358,22 +371,44 @@ func (p *panel) shownOn(v engine.View) bool {
 	return v.State == engine.On
 }
 
-func (p *panel) dot(c *ui.Context, v engine.View) {
+// iconTile 是行首的图标块：颜色说明状态（开启为强调色、出错为红色、运行中描边呼吸），
+// 颜色变化有过渡。
+func (p *panel) iconTile(c *ui.Context, v engine.View, compact bool) {
 	pal := p.pal
-	d := ui.Column(c).Size(6, 6).Radius(3)
+	s := float32(30)
+	if compact {
+		s = 24
+	}
+	on := p.shownOn(v) && v.Type != contract.Action
+	bg, fg := pal.L2, pal.T2
 	switch {
 	case v.State == engine.Error || (v.Type == contract.Action && p.lastFailed(v) && p.flashing(v)):
-		d.Background(pal.Red)
-	case v.State == engine.Running || v.State == engine.Pending:
-		d.Background(pal.Accent).Opacity(0.55 + 0.45*float32(math.Abs(math.Sin(float64(time.Now().UnixMilli())/350))))
-	case v.State == engine.On:
-		d.Background(pal.Accent)
-	case v.State == engine.Unknown:
-		d.Border(1, pal.L4)
-	default:
-		d.Background(pal.L4)
+		bg, fg = alpha(pal.Red, 0.14), pal.Red
+	case v.Type == contract.Action && p.flashing(v):
+		bg, fg = alpha(pal.Green, 0.14), pal.Green
+	case on && pal.Ink:
+		bg, fg = pal.FG, pal.BG
+	case on:
+		bg, fg = alpha(pal.Accent, 0.16), pal.Accent
+	case v.Type == contract.Action:
+		fg = pal.T1
 	}
+	t := ui.Row(c.Key("ico-"+v.ID)).Size(s, s).Radius(s * 0.3).Shrink(0).AlignItems(ui.Center).Justify(ui.Center)
+	t.Background(t.AnimateColor("bg", bg, animColor))
+	col := t.AnimateColor("fg", fg, animColor)
+	if v.State == engine.Running || v.State == engine.Pending || p.pendingFor(v.ID) {
+		ring := pal.Accent
+		if pal.Ink {
+			ring = pal.FG
+		}
+		pulse := t.Loop("pulse", 1400*time.Millisecond, ui.Linear)
+		t.Border(1.5, alpha(ring, 0.2+0.5*float32(0.5-0.5*math.Cos(2*math.Pi*float64(pulse)))))
+	}
+	t.Children(func() { switchIcon(c, v.Icon, float32(math.Round(float64(s*0.53)))).TextColor(col) })
 }
+
+// pendingFor 报告是否刚点过、还在等脚本结果。
+func (p *panel) pendingFor(id string) bool { _, ok := p.pending[id]; return ok }
 
 func (p *panel) lastFailed(v engine.View) bool { return v.LastRun != nil && !v.LastRun.OK }
 
@@ -489,38 +524,34 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 	compact := p.prefs.Density == "compact"
 	hasParams := len(v.Params) > 0
 	open := p.expanded == v.ID
-	padY := float32(7)
+	h := float32(50)
 	if compact {
-		padY = 4
+		h = 34
 	}
-	ui.Column(c.Key("item-" + v.ID)).FillWidth().Children(func() {
-		r := ui.Row(c.Key("row-"+v.ID)).FillWidth().AlignItems(ui.Center).Gap(10).Padding(padY, 10).Radius(10)
-		if open || r.Hovered() {
-			r.Background(pal.L1)
+	ui.Column(c.Key("item-" + v.ID)).FillWidth().Transition(motionRow).Children(func() {
+		r := ui.Row(c.Key("row-"+v.ID)).FillWidth().Height(h).AlignItems(ui.Center).Gap(10).Padding(0, 8).Radius(11)
+		bg := ui.Transparent
+		switch {
+		case open:
+			bg = pal.L1
+		case r.Hovered():
+			bg = alpha(pal.FG, 0.035)
 		}
+		r.Background(r.AnimateColor("bg", bg, animHover))
 		r.Children(func() {
-			p.dot(c, v)
-			iconColor := pal.T1
-			if v.Type != contract.Action && v.State != engine.On {
-				iconColor = pal.T2
-			}
-			ui.Row(c).Width(18).Justify(ui.Center).Children(func() { switchIcon(c, v.Icon, 16).TextColor(iconColor) })
-			label := ui.Column(c.Key("label-" + v.ID)).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				ui.Text(c, v.Name).FontSize(13).TextColor(pal.T1).SingleLine().Ellipsis("…")
+			p.iconTile(c, v, compact)
+			label := ui.Column(c.Key("label-" + v.ID)).Grow(1).MinWidth(0).Gap(2).Children(func() {
+				ui.Text(c, v.Name).FontSize(13).FontWeight(500).TextColor(pal.T1).SingleLine().Ellipsis("…")
 				if sub, col := p.subline(v); sub != "" && !compact {
-					ui.Text(c, sub).FontSize(11).TextColor(col).SingleLine().Ellipsis("…")
+					ui.Text(c.Key("sub"), sub).FontSize(11).TextColor(col).SingleLine().Ellipsis("…").
+						ContentTransition(ui.ContentTransition{})
 				}
 			})
 			if hasParams {
-				chev := ui.Row(c.Key("chev-"+v.ID)).Size(18, 18).Radius(5).AlignItems(ui.Center).Justify(ui.Center).Label("params")
-				if chev.Hovered() {
-					chev.Background(pal.L2)
-				}
-				name := "chevron-right"
-				if open {
-					name = "chevron-down"
-				}
-				chev.Children(func() { icon(c, name, 13).TextColor(pal.T3) })
+				chev := ui.Row(c.Key("chev-"+v.ID)).Size(20, 20).Radius(6).AlignItems(ui.Center).Justify(ui.Center).Label("params")
+				chev.Background(chev.AnimateColor("bg", pick(chev.Hovered(), pal.L2, ui.Transparent), animHover))
+				turn := chev.AnimateTo("turn", 90*b2f(open), ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.15}})
+				chev.Children(func() { icon(c, "chevron-right", 13).TextColor(pal.T3).Rotate(turn) })
 				if chev.Clicked() || label.Clicked() {
 					if open {
 						p.expanded = ""
@@ -541,7 +572,9 @@ func (p *panel) control(c *ui.Context, v engine.View) {
 	pal := p.pal
 	if v.Type == contract.Action {
 		btn := ui.Row(c.Key("run-"+v.ID)).Height(24).MinWidth(52).Padding(0, 10).Radius(999).Gap(6).
-			AlignItems(ui.Center).Justify(ui.Center).Border(1, pal.L3).Label(tr("run") + " " + v.Name)
+			AlignItems(ui.Center).Justify(ui.Center).Border(1, pal.L3).Label(tr("run") + " " + v.Name).
+			Transition(motionColors)
+		pressPose(btn, 0.94)
 		switch {
 		case v.State == engine.Running:
 			btn.Border(1, alpha(pal.Accent, 0.45)).Background(alpha(pal.Accent, 0.08))
@@ -579,7 +612,8 @@ func (p *panel) control(c *ui.Context, v engine.View) {
 	}
 	on := p.shownOn(v)
 	before := on
-	ui.Switch(c.Key("sw-"+v.ID), &on).Label(v.Name)
+	busy := v.State == engine.Pending || p.pendingFor(v.ID)
+	p.pal.toggle(c, "sw-"+v.ID, &on, busy, p.prefs.Density == "compact").Label(v.Name)
 	if on != before {
 		p.setSwitch(v, on)
 	}
@@ -643,7 +677,7 @@ func (p *panel) commit(v engine.View, key, value string) {
 
 func (p *panel) paramsEditor(c *ui.Context, v engine.View) {
 	pal := p.pal
-	ui.Column(c.Key("params-"+v.ID)).FillWidth().Padding(4, 10, 12, 44).Gap(10).Children(func() {
+	ui.Column(c.Key("params-"+v.ID)).FillWidth().Padding(4, 10, 12, 48).Gap(10).Transition(motionReveal).Children(func() {
 		for _, pv := range v.Params {
 			pv := pv
 			ui.Column(c.Key("param-" + v.ID + "-" + pv.Key)).FillWidth().Gap(5).Children(func() {
@@ -667,43 +701,33 @@ func (p *panel) paramsEditor(c *ui.Context, v engine.View) {
 	})
 }
 
+// selectParam 用可换行的胶囊列出选项：选项多或文字长时自动折到下一行，不会超出面板。
 func (p *panel) selectParam(c *ui.Context, v engine.View, pv engine.ParamView) {
-	labels := make([]string, len(pv.Options))
-	sel := 0
-	for i, o := range pv.Options {
-		labels[i] = o.Label
-		if o.Value == pv.Value {
-			sel = i
+	ui.Row(c).FillWidth().Gap(5).Wrap().AlignItems(ui.Center).Children(func() {
+		for i, o := range pv.Options {
+			if p.chip(c, "opt-"+strconv.Itoa(i), o.Label, o.Value == pv.Value) && o.Value != pv.Value {
+				p.commit(v, pv.Key, o.Value)
+			}
 		}
-	}
-	before := sel
-	ui.Segmented(c.Key("seg"), &sel, labels...).FillWidth()
-	if sel != before && sel < len(pv.Options) {
-		p.commit(v, pv.Key, pv.Options[sel].Value)
-	}
+	})
 }
 
 func (p *panel) chip(c *ui.Context, key, label string, active bool) bool {
 	pal := p.pal
-	ch := ui.Row(c.Key(key)).Height(22).Padding(0, 8).Radius(999).AlignItems(ui.Center)
-	if active {
-		if pal.Ink {
-			ch.Background(pal.FG)
-		} else {
-			ch.Background(pal.Accent)
-		}
-	} else {
-		ch.Border(1, pal.L3)
-		if ch.Hovered() {
-			ch.Background(pal.L1)
-		}
+	ch := ui.Row(c.Key(key)).Height(24).Padding(0, 10).Radius(999).AlignItems(ui.Center).MaxWidth(240).Label(label)
+	bg, border, col := ui.Transparent, pal.L3, pal.T1
+	switch {
+	case active && pal.Ink:
+		bg, border, col = pal.FG, pal.FG, pal.OnAccent
+	case active:
+		bg, border, col = pal.Accent, pal.Accent, pal.OnAccent
+	case ch.Hovered():
+		bg = pal.L1
 	}
+	ch.Background(ch.AnimateColor("bg", bg, animColor)).Border(1, ch.AnimateColor("bd", border, animColor))
+	pressPose(ch, 0.95)
 	ch.Children(func() {
-		col := pal.T1
-		if active {
-			col = pal.OnAccent
-		}
-		ui.Text(c, label).FontSize(11.5).TextColor(col).SingleLine()
+		ui.Text(c, label).FontSize(11.5).TextColor(ch.AnimateColor("fg", col, animColor)).SingleLine().Ellipsis("…")
 	})
 	return ch.Clicked()
 }
@@ -791,24 +815,27 @@ func (p *panel) keyParam(c *ui.Context, v engine.View, pv engine.ParamView) {
 func (p *panel) tile(c *ui.Context, v engine.View) {
 	pal := p.pal
 	on := p.shownOn(v)
-	t := ui.Column(c.Key("tile-"+v.ID)).MinHeight(74).Padding(10, 11).Radius(12).Justify(ui.SpaceBetween)
+	t := ui.Column(c.Key("tile-"+v.ID)).Height(78).Padding(10, 11).Radius(14).Justify(ui.SpaceBetween).Label(v.Name)
+	bg, border := pal.L1, pal.L2
 	switch {
 	case on && v.Type != contract.Action && pal.Ink:
-		t.Background(pal.FG)
+		bg, border = pal.FG, pal.FG
 	case on && v.Type != contract.Action:
-		t.Background(alpha(pal.Accent, 0.12)).Border(1, alpha(pal.Accent, 0.45))
-	case v.State == engine.Running:
-		t.Background(pal.L1).Border(1, alpha(pal.Accent, 0.5))
-	default:
-		t.Background(pal.L1).Border(1, pal.L2)
-		if t.Hovered() {
-			t.Background(pal.L2)
-		}
+		bg, border = alpha(pal.Accent, 0.13), alpha(pal.Accent, 0.45)
+	case v.State == engine.Error:
+		bg, border = alpha(pal.Red, 0.08), alpha(pal.Red, 0.4)
+	case v.State == engine.Running || v.State == engine.Pending:
+		border = alpha(pal.Accent, 0.5)
+	case t.Hovered():
+		bg = pal.L2
 	}
+	t.Background(t.AnimateColor("bg", bg, animColor)).Border(1, t.AnimateColor("bd", border, animColor))
+	pressPose(t, 0.96)
 	fg, sub := pal.T1, pal.T3
 	if on && v.Type != contract.Action && pal.Ink {
 		fg, sub = pal.BG, alpha(pal.BG, 0.7)
 	}
+	fg, sub = t.AnimateColor("fg", fg, animColor), t.AnimateColor("sub", sub, animColor)
 	t.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			ic := fg
@@ -840,7 +867,7 @@ func (p *panel) tile(c *ui.Context, v engine.View) {
 			} else if col == pal.T3 {
 				col = sub
 			}
-			ui.Text(c, s).FontSize(11).TextColor(col).SingleLine().Ellipsis("…")
+			ui.Text(c.Key("sub"), s).FontSize(11).TextColor(col).SingleLine().Ellipsis("…").ContentTransition(ui.ContentTransition{})
 		})
 	})
 	if t.Clicked() {
@@ -860,12 +887,12 @@ func (p *panel) footer(c *ui.Context) {
 	pal := p.pal
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(2).Padding(6, 8).Children(func() {
 		wb := ui.Row(c.Key("open-workbench")).Height(26).Padding(0, 8).Radius(7).Gap(6).AlignItems(ui.Center).Label(tr("workbench"))
-		if wb.Hovered() {
-			wb.Background(pal.L2)
-		}
+		wb.Background(wb.AnimateColor("bg", pick(wb.Hovered(), pal.L2, ui.Transparent), animHover))
+		pressPose(wb, 0.96)
+		col := wb.AnimateColor("fg", pick(wb.Hovered(), pal.T1, pal.T2), animHover)
 		wb.Children(func() {
-			icon(c, "square-terminal", 14).TextColor(pal.T2)
-			ui.Text(c, tr("workbench")).FontSize(12.5).TextColor(pal.T2)
+			icon(c, "square-terminal", 14).TextColor(col)
+			ui.Text(c, tr("workbench")).FontSize(12.5).TextColor(col)
 		})
 		if wb.Clicked() && p.openWorkbench != nil {
 			p.openWorkbench("")

@@ -76,12 +76,15 @@ func Run() error {
 	timeout, shell := engineDefaults(st)
 	eng := engine.New(engine.Config{
 		ScriptsDir: scriptsDir, LedgerPath: paths.Ledger(), Bin: exe, Store: st,
-		Trash: darwin.Trash, WatchInterval: 2 * time.Second,
+		Trash: darwin.Trash, WatchInterval: 2 * time.Second, Guard: true,
 		DefaultTimeout: timeout, Shell: shell, ExtraEnv: func() []string { return globalEnv(st) },
 		NoRestore: st.Setting(keyRestore) == "false",
 	})
 	if err := eng.Seed(presets.All()); err != nil {
 		log.Println("seed:", err)
+	}
+	if up := eng.UpgradePresets(presets.Upgrades()); len(up) > 0 {
+		log.Println("upgraded preset scripts:", up)
 	}
 	srv := api.New(eng, api.Options{Port: paths.Port(), DiscoveryPath: paths.Discovery(), Version: version.Version, Store: st})
 	// API 先于状态恢复启动：恢复拉起的 daemon 可能立刻调用 `simpletoggle press`
@@ -93,12 +96,18 @@ func Run() error {
 			apiOn = false
 		}
 	}
+	desiredBefore := st.DesiredAll()
 	if err := eng.Start(); err != nil {
 		srv.Close()
 		return err
 	}
+	unclean := beginSession()
 
 	c := &controller{eng: eng, srv: srv, st: st, prefs: prefs, apiErr: apiErr, apiOn: apiOn, exe: exe, extras: map[string]*extraItem{}}
+	if unclean {
+		c.crashDesired = desiredNames(eng, desiredBefore)
+		c.unclean = true
+	}
 	c.auto = automation.New(automation.Config{
 		Engine: eng, Store: st, Host: appHost{},
 		Describe:   func(r store.Rule) string { return ruleText(r, c.targetName) },
@@ -136,6 +145,9 @@ type controller struct {
 
 	devPanel bool
 
+	unclean      bool     // 上次没有正常退出
+	crashDesired []string // 上次退出时开着的开关
+
 	appsOnce sync.Once
 	apps     []appInfo
 
@@ -152,10 +164,12 @@ type controller struct {
 	wbWin        *mygo.Window
 	wbAllowClose bool
 
-	tickMu  sync.Mutex
-	ticking bool
-	stop    chan struct{}
-	once    sync.Once
+	tickMu     sync.Mutex
+	ticking    bool
+	tickGen    int
+	tickPeriod time.Duration
+	stop       chan struct{}
+	once       sync.Once
 }
 
 func (c *controller) ready() {
@@ -164,7 +178,7 @@ func (c *controller) ready() {
 	c.panel.openScripts = func() { _ = mygo.Shell.OpenPath(c.eng.ScriptsDir()) }
 	c.panel.openWorkbench = func(id string) { c.openWorkbench(secSwitches, id) }
 	c.panel.openSettings = func() { c.openSettings("") }
-	c.panel.quit = mygo.App.Quit
+	c.panel.quit = c.requestQuit
 	c.panel.axTrusted = darwin.AccessibilityTrusted
 	c.panel.reduceTransparency = func() bool { return mygo.Theme.Preferences().ReduceTransparency }
 	c.panel.requestAX = func() {
@@ -196,6 +210,9 @@ func (c *controller) ready() {
 
 	c.startAutomation()
 	c.notified = map[string]bool{}
+	if c.unclean {
+		c.reportUncleanExit(c.crashDesired)
+	}
 	c.registerAppShortcuts()
 	mygo.App.OnLocaleChanged(func(loc string) {
 		setLanguage(loc)
@@ -308,26 +325,50 @@ func (c *controller) togglePanel() {
 		return
 	}
 	w := c.prefs.width()
-	c.panel.lastHeight = 0
-	c.panel.invalidate()
+	maxH := float32(800)
+	if d := mygo.Screen.PrimaryDisplay(); d.WorkArea.Height > 0 {
+		maxH = float32(d.WorkArea.Height) - 40
+	}
+	// 用上次实测的高度打开（内容没变时就是准确的）；第一次用估计值。
+	// 窗口先完全透明，等按真实高度画好一帧再淡入，所以不会看到尺寸跳动。
+	height := c.panel.lastHeight
+	if height <= 0 {
+		height = float32(c.estimateHeight())
+	}
+	height = min(height, maxH)
+	p := c.panel
+	p.invalidate()
+	p.expanded, p.searching, p.query = "", false, ""
+	p.edits = map[string]string{} // 上次没提交的参数输入不带到下一次
+	p.revealed, p.targetH = false, height
 	c.flyout = mygo.NewFlyout(mygo.FlyoutOptions{
 		Tray: c.tray, Placement: mygo.PlacementBottom, Gap: 6,
-		Width: int(w), Height: c.estimateHeight(),
+		Width: int(w), Height: int(height + 0.5),
 		Focusable: !c.devPanel, Shadow: true, Vibrancy: mygo.VibrancyPopover, CornerRadius: 16,
-		Content: ui.View(c.panel.view),
+		Content: ui.View(p.view),
 	})
 	fl := c.flyout
-	c.panel.resize = func(h float32) {
-		maxH := float32(800)
-		if d := mygo.Screen.PrimaryDisplay(); d.WorkArea.Height > 0 {
-			maxH = float32(d.WorkArea.Height) - 40
+	fl.SetOpacity(0)
+	shown := false
+	reveal := func() { // 主线程
+		if shown || c.flyout != fl {
+			return
 		}
+		shown = true
+		p.revealed = true
+		go fadeIn(fl, p.lessMotion)
+	}
+	p.reveal = func() { go mygo.RunOnMain(reveal) }
+	// 兜底：万一没有等到按真实高度画的那一帧（例如窗口透明时系统不让它绘制），也要显示出来
+	time.AfterFunc(300*time.Millisecond, func() { mygo.RunOnMain(reveal) })
+	p.resize = func(h float32) float32 {
 		height := int(min(h, maxH) + 0.5)
 		go mygo.RunOnMain(func() {
 			if c.flyout == fl {
 				fl.SetSize(int(w), height)
 			}
 		})
+		return float32(height)
 	}
 	fl.OnClosed(func() {
 		if c.flyout == fl {
@@ -338,6 +379,22 @@ func (c *controller) togglePanel() {
 	c.eng.PanelVisible(true)
 }
 
+// fadeIn 把面板窗口在约 150ms 内从透明淡入（减弱动态效果时直接显示）。
+func fadeIn(fl *mygo.Window, instant bool) {
+	const d = 150 * time.Millisecond
+	start := time.Now()
+	for !instant {
+		t := float64(time.Since(start)) / float64(d)
+		if t >= 1 {
+			break
+		}
+		a := 1 - (1-t)*(1-t)*(1-t) // ease-out
+		mygo.RunOnMain(func() { fl.SetOpacity(a) })
+		time.Sleep(8 * time.Millisecond)
+	}
+	mygo.RunOnMain(func() { fl.SetOpacity(1) })
+}
+
 // estimateHeight 是面板首次打开时的高度估计；第一帧之后按实际内容校正。
 func (c *controller) estimateHeight() int {
 	n := 0
@@ -346,7 +403,15 @@ func (c *controller) estimateHeight() int {
 			n++
 		}
 	}
-	return min(600, 110+max(1, n)*46)
+	// 与面板的固定尺寸一致：顶栏 46 + 分隔线 + 列表上下留白 10 + 每行 + 底栏 39
+	row := 50
+	switch {
+	case c.prefs.Layout == "grid":
+		return min(600, 96+(max(1, n)+1)/2*84)
+	case c.prefs.Density == "compact":
+		row = 34
+	}
+	return min(600, 96+max(1, n)*row)
 }
 
 func (c *controller) contextMenu() {
@@ -360,7 +425,7 @@ func (c *controller) contextMenu() {
 		{Label: tr("open_scripts"), Click: func(*mygo.MenuItem, *mygo.Window) { _ = mygo.Shell.OpenPath(c.eng.ScriptsDir()) }},
 		{Label: tr("refresh"), Click: func(*mygo.MenuItem, *mygo.Window) { c.eng.Refresh() }},
 		mygo.Separator(),
-		{Role: mygo.RoleQuit},
+		{Label: tr("quit_menu"), Click: func(*mygo.MenuItem, *mygo.Window) { c.requestQuit() }},
 	})
 	c.tray.SetMenu(menu)
 	defer c.tray.SetMenu(nil)
@@ -485,12 +550,22 @@ func (c *controller) syncMenubar() {
 		}
 	}
 
-	c.setTicking(countdownSec != nil || (busy && c.prefs.BusyAnim) || anyCountdown(wantExtras) || (replace != nil && replace.Remaining != nil))
+	// 只在菜单栏真的显示着倒计时（每秒一次）或运行中动画（每半秒一次）时刷新，其余时间不唤醒
+	shownCountdown := (replace == nil && c.prefs.MenubarExtra == "countdown" && countdownSec != nil) ||
+		anyCountdown(wantExtras) || (replace != nil && replace.Remaining != nil && replace.MenuBar.Countdown)
+	switch {
+	case busy && c.prefs.BusyAnim:
+		c.setTicking(500 * time.Millisecond)
+	case shownCountdown:
+		c.setTicking(time.Second)
+	default:
+		c.setTicking(0)
+	}
 }
 
 func anyCountdown(m map[string]engine.View) bool {
 	for _, v := range m {
-		if v.Remaining != nil {
+		if v.Remaining != nil && v.MenuBar != nil && v.MenuBar.Countdown {
 			return true
 		}
 	}
@@ -532,18 +607,22 @@ func (c *controller) extraMenu(t *mygo.Tray, v engine.View) {
 }
 
 // setTicking 只在需要（倒计时、运行中的动画）时每半秒刷新菜单栏，其余时间不唤醒。
-func (c *controller) setTicking(on bool) {
+// period 为 0 表示停止。
+func (c *controller) setTicking(period time.Duration) {
 	c.tickMu.Lock()
 	defer c.tickMu.Unlock()
-	if on == c.ticking {
+	if period == c.tickPeriod {
 		return
 	}
-	c.ticking = on
-	if !on {
+	c.tickPeriod = period
+	c.ticking = period > 0
+	c.tickGen++ // 关掉又马上打开（或换频率）时，旧的计时 goroutine 看到代数变了就退出，不会两个同时跑
+	if period == 0 {
 		return
 	}
+	gen := c.tickGen
 	go func() {
-		t := time.NewTicker(500 * time.Millisecond)
+		t := time.NewTicker(period)
 		defer t.Stop()
 		for {
 			select {
@@ -551,7 +630,7 @@ func (c *controller) setTicking(on bool) {
 				return
 			case <-t.C:
 				c.tickMu.Lock()
-				still := c.ticking
+				still := c.ticking && c.tickGen == gen
 				c.tickMu.Unlock()
 				if !still {
 					return
@@ -579,6 +658,7 @@ func (c *controller) shutdown() {
 		if c.tray != nil {
 			c.tray.Destroy()
 		}
+		endSession()
 	})
 }
 

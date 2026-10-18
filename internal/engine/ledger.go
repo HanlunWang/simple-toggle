@@ -64,7 +64,7 @@ func readLedger(path string) map[string]ledgerEntry {
 // ownedByUs 判断 pid 仍是账本记下的那个进程，防止 PID 被系统复用后误杀无关进程。
 // v2 账本比对进程启动时间：脚本 exec 成别的程序（如 caffeinate）后命令行会变，
 // 但启动时间不变。v1 账本没有启动时间，只能检查命令行是否指向脚本目录。
-func (e *Engine) ownedByUs(ent ledgerEntry) bool {
+func ownedByUs(ent ledgerEntry, scriptsDir string) bool {
 	if ent.Started > 0 {
 		out, err := exec.Command("/bin/ps", "-o", "lstart=", "-p", strconv.Itoa(ent.PID)).Output()
 		if err != nil {
@@ -78,22 +78,29 @@ func (e *Engine) ownedByUs(ent ledgerEntry) bool {
 		return d >= -2 && d <= 2
 	}
 	out, err := exec.Command("/bin/ps", "-o", "command=", "-p", strconv.Itoa(ent.PID)).Output()
-	return err == nil && strings.Contains(string(out), e.cfg.ScriptsDir)
+	return err == nil && strings.Contains(string(out), scriptsDir)
 }
 
 // sweepOrphans 终止账本里的上一代常驻进程（app 崩溃或被强杀时遗留的）。
-func (e *Engine) sweepOrphans() {
-	entries := readLedger(e.cfg.LedgerPath)
+func (e *Engine) sweepOrphans() { SweepLedger(e.cfg.LedgerPath, e.cfg.ScriptsDir) }
+
+// SweepLedger 终止账本里记下的常驻进程并删除账本，返回终止了几个。
+// 启动时（清理上次崩溃的遗留）和守护进程（app 意外退出的那一刻）都用它。
+func SweepLedger(path, scriptsDir string) int {
+	entries := readLedger(path)
+	n := 0
 	for _, ent := range entries {
-		if ent.PID <= 1 || !e.ownedByUs(ent) {
+		if ent.PID <= 1 || !ownedByUs(ent, scriptsDir) {
 			continue
 		}
 		// v2 启动的进程自成进程组，整组终止；v1 的不是组长，只能终止进程本身
 		if syscall.Kill(-ent.PID, syscall.SIGTERM) != nil {
 			_ = syscall.Kill(ent.PID, syscall.SIGTERM)
 		}
+		n++
 	}
 	if entries != nil {
-		_ = os.Remove(e.cfg.LedgerPath)
+		_ = os.Remove(path)
 	}
+	return n
 }

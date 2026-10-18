@@ -65,8 +65,19 @@ func (e *Engine) DaemonOutput(id string) (out string, ok bool) {
 // Runs 按时间倒序返回运行记录。
 func (e *Engine) Runs(f store.Filter) []store.Run { return e.cfg.Store.Runs(f) }
 
-// ClearRuns 清空运行记录。
-func (e *Engine) ClearRuns() error { return e.cfg.Store.ClearRuns() }
+// ClearRuns 清空运行记录（连同用量统计）。
+func (e *Engine) ClearRuns() error {
+	err := e.cfg.Store.ClearRuns()
+	e.mu.Lock()
+	for _, r := range e.rts {
+		r.lastRun, r.lastRunLoaded = nil, true
+	}
+	e.mu.Unlock()
+	return err
+}
+
+// Usage 返回按天汇总的用量统计。
+func (e *Engine) Usage() store.Usage { return e.cfg.Store.Usage() }
 
 // SetMeta 保存「用户怎么用这个开关」的设置（分组、排序、确认、超时等）。
 func (e *Engine) SetMeta(id string, m store.Meta) error {

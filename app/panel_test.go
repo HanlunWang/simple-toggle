@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -59,7 +60,17 @@ func (f *fakeBackend) SetParams(id string, values map[string]string, src engine.
 	}
 	return nil
 }
-func (f *fakeBackend) SetHidden(string, bool) error { return nil }
+func (f *fakeBackend) SetHidden(id string, hidden bool) error {
+	f.log("hidden " + id + " " + map[bool]string{true: "true", false: "false"}[hidden])
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.views {
+		if f.views[i].ID == id {
+			f.views[i].Hidden = hidden
+		}
+	}
+	return nil
+}
 func (f *fakeBackend) Subscribe() (<-chan engine.Event, func()) {
 	return make(chan engine.Event), func() {}
 }
@@ -172,7 +183,7 @@ func TestPanelParams(t *testing.T) {
 	if err := tt.Click("params"); err != nil { // 第一个带参数的开关（Keep Awake）的展开按钮
 		t.Fatal(err)
 	}
-	tt.Frame()
+	tt.Advance(400 * time.Millisecond) // 等展开动画结束
 	if !tt.HasText("两者") || !tt.HasText("SWITCH_MODE") {
 		t.Fatalf("params not expanded: %q", tt.Texts())
 	}

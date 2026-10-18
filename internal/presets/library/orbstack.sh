@@ -5,6 +5,7 @@
 # <switch.description> Start or stop the OrbStack container engine
 #
 # Needs the `orb` command that comes with OrbStack (brew install orbstack).
+PATH="$PATH:$HOME/.orbstack/bin"
 command -v orb >/dev/null || { echo "orb not found"; exit 1; }
 case "$1" in
   on)     orb start ;;

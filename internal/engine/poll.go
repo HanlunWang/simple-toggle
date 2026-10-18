@@ -55,25 +55,37 @@ func (e *Engine) loop() {
 		defer t.Stop()
 		watch = t.C
 	}
+	// 轮询的截止时间只在真正检查过之后才往后推：脚本目录的检测（每 2 秒）不能把它一直推迟，
+	// 否则定时轮询永远等不到，外部改动（控制中心等）不会被发现。
+	timer := time.NewTimer(e.interval())
+	defer timer.Stop()
+	polled := func() {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(e.interval())
+	}
 	for {
-		timer := time.NewTimer(e.interval())
 		select {
 		case <-e.stopCh:
-			timer.Stop()
 			return
 		case <-e.wake:
-			timer.Stop()
 			e.refresh()
+			polled()
 		case <-timer.C:
 			e.refresh()
+			timer.Reset(e.interval())
 		case <-watch:
-			timer.Stop()
 			e.mu.Lock()
 			changed := e.signature() != e.dirSig
 			e.mu.Unlock()
 			if changed {
 				e.reload()
 				e.refresh()
+				polled()
 			}
 		}
 	}

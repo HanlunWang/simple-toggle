@@ -355,3 +355,78 @@ func TestIsTerminal(t *testing.T) {
 		t.Fatal("a file is not a terminal")
 	}
 }
+
+// TestGuardStopsDaemonsOnCrash：引擎被强杀（崩溃）时，守护进程立刻结束遗留的常驻进程，
+// 不用等到下次启动。
+func TestGuardStopsDaemonsOnCrash(t *testing.T) {
+	in := start(t)
+	in.must("on", "serve")
+	ledger := filepath.Join(in.home, "daemons.json")
+	var pid int
+	deadline := time.Now().Add(5 * time.Second)
+	for pid == 0 && time.Now().Before(deadline) {
+		var entries map[string]struct {
+			PID int `json:"pid"`
+		}
+		if data, err := os.ReadFile(ledger); err == nil && json.Unmarshal(data, &entries) == nil {
+			pid = entries["serve.sh"].PID
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if pid == 0 {
+		t.Fatal("daemon not in ledger")
+	}
+	if err := in.serve.Process.Kill(); err != nil { // SIGKILL：Shutdown 不会执行
+		t.Fatal(err)
+	}
+	_ = in.serve.Wait()
+	deadline = time.Now().Add(5 * time.Second)
+	for alive(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("daemon %d still running after the engine was killed", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if _, err := os.Stat(ledger); !os.IsNotExist(err) {
+		t.Fatalf("ledger not removed: %v", err)
+	}
+}
+
+func alive(pid int) bool {
+	// 已退出但还没被回收的僵尸进程也算结束
+	out, err := exec.Command("/bin/ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+	return err == nil && len(out) > 0 && !strings.HasPrefix(strings.TrimSpace(string(out)), "Z")
+}
+
+// TestGuardExitsOnCleanQuit：正常退出时守护进程随之结束，不留下进程。
+func TestGuardExitsOnCleanQuit(t *testing.T) {
+	in := start(t)
+	in.must("on", "serve")
+	pattern := "__guard " + strconv.Itoa(in.serve.Process.Pid) + " "
+	deadline := time.Now().Add(5 * time.Second)
+	for !guardRunning(pattern) {
+		if time.Now().After(deadline) {
+			t.Fatal("guard not started with the first daemon")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	in.serve.Process.Signal(os.Interrupt)
+	_ = in.serve.Wait()
+	deadline = time.Now().Add(5 * time.Second)
+	for guardRunning(pattern) {
+		if time.Now().After(deadline) {
+			t.Fatal("guard still running after a clean quit")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func guardRunning(pattern string) bool {
+	out, _ := exec.Command("/bin/ps", "-axo", "stat=,command=").Output()
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, pattern) && !strings.HasPrefix(strings.TrimSpace(line), "Z") {
+			return true
+		}
+	}
+	return false
+}

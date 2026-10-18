@@ -221,7 +221,7 @@ func (w *workbench) ruleEditor(c *ui.Context) {
 		}
 		ui.Text(c, label).FontSize(12).TextColor(pal.T3)
 		on := r.Enabled
-		ui.Switch(c.Key("rule-on"), &on).Label(tr("rule_on"))
+		w.pal.toggle(c, "rule-on", &on, false, false).Label(tr("rule_on"))
 		if on != r.Enabled {
 			r.Enabled = on
 			if on {
@@ -285,7 +285,7 @@ func (w *workbench) ruleEditor(c *ui.Context) {
 		w.card(c, "rl-opts", func() {
 			w.cardRow(c, tr("rule_notify"), "", func() {
 				on := r.Notify
-				ui.Switch(c.Key("rl-notify"), &on).Label(tr("rule_notify"))
+				w.pal.toggle(c, "rl-notify", &on, false, false).Label(tr("rule_notify"))
 				if on != r.Notify {
 					r.Notify = on
 					w.saveRule(r)

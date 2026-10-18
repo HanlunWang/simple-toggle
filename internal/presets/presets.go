@@ -75,3 +75,18 @@ func Library() []Item {
 	}
 	return out
 }
+
+// Upgrades 返回可以自动升级的预置脚本：当前内容，以及以前发布过的各版本的指纹。
+func Upgrades() []engine.Upgrade {
+	var out []engine.Upgrade
+	for _, it := range catalog {
+		prev := previous[it.File]
+		if len(prev) == 0 {
+			continue
+		}
+		if content, ok := read(it.File); ok {
+			out = append(out, engine.Upgrade{File: it.File, Content: content, Previous: prev})
+		}
+	}
+	return out
+}

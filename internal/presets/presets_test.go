@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/HanlunWang/simple-toggle/internal/contract"
+	"github.com/HanlunWang/simple-toggle/internal/engine"
 )
 
 func TestCatalog(t *testing.T) {
@@ -28,5 +29,16 @@ func TestCatalog(t *testing.T) {
 	}
 	if seeded != len(All()) || seeded != 9 {
 		t.Fatalf("seeded %d, All %d", seeded, len(All()))
+	}
+}
+
+func TestUpgradesKnowOnlyOlderVersions(t *testing.T) {
+	for _, u := range Upgrades() {
+		cur := engine.PresetFingerprint(u.Content)
+		for _, h := range u.Previous {
+			if h == cur {
+				t.Errorf("%s: current version listed as previous", u.File)
+			}
+		}
 	}
 }

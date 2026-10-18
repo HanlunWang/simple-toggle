@@ -1,9 +1,13 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
 // Example 是一个预置脚本。
@@ -39,4 +43,38 @@ func (e *Engine) Seed(examples []Example) error {
 		return nil
 	}
 	return e.cfg.Store.MarkSeeded(done...)
+}
+
+// Upgrade 是一个可自动升级的预置脚本。
+type Upgrade struct {
+	File     string
+	Content  string
+	Previous []string // 以前发布过的版本：去掉末尾空白后的 SHA-256
+}
+
+// PresetFingerprint 是脚本内容的指纹（去掉末尾空白，不受编辑器补换行的影响）。
+func PresetFingerprint(content string) string {
+	sum := sha256.Sum256([]byte(strings.TrimRight(content, " \t\n")))
+	return hex.EncodeToString(sum[:])
+}
+
+// UpgradePresets 把脚本目录里「与某个旧版预置完全相同」的脚本换成当前版本，
+// 用户改过的不动。返回升级了的文件。
+func (e *Engine) UpgradePresets(items []Upgrade) []string {
+	var done []string
+	for _, it := range items {
+		path := filepath.Join(e.cfg.ScriptsDir, it.File)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		fp := PresetFingerprint(string(data))
+		if fp == PresetFingerprint(it.Content) || !slices.Contains(it.Previous, fp) {
+			continue
+		}
+		if writeScript(path, it.Content) == nil {
+			done = append(done, it.File)
+		}
+	}
+	return done
 }

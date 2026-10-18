@@ -9,7 +9,8 @@ OpenToggle is now **SimpleToggle**: a complete rewrite with a new name, a new lo
 - **Scenes** — set several switches in one click, and restore them with another
 - **Automations** — run switches or scenes by time, Wi-Fi network, power, apps, displays, login / wake / unlock, file changes or shortcuts
 - **Global shortcuts** for switches, scenes, the panel and the workbench
-- **Activity** — every run with its source, duration, exit code and output
+- **Activity** — usage statistics (uses per day, a calendar heat map, time of week, sources, switches by use) and every run with its source, duration, exit code and output
+- **Safe to quit** — quitting explains what happens to the switches that are on; if SimpleToggle crashes, long-running switches are stopped right away and turned back on at the next launch
 - **Settings** — themes, accent colors, panel layout and density, menu bar icon styles, notifications, and more
 - **AI** — permissions for AI agents, approval of script changes from AI with a diff, one-click setup for Claude Code, Cursor and Codex, and new MCP tools
 - **Deep links** — `simpletoggle://` for Shortcuts, Raycast and Alfred

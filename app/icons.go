@@ -58,7 +58,14 @@ func svgIcon(name string) *ui.SVG {
 	}
 	src, ok := lucide()[name]
 	if !ok {
-		src = lucide()["toggle-right"]
+		// 不认识的名字（例如编辑器里正在输入的半截名字）共用一个回退图标，不逐个缓存
+		if name == "toggle-right" {
+			return nil
+		}
+		svgMu.Unlock()
+		s := svgIcon("toggle-right")
+		svgMu.Lock()
+		return s
 	}
 	s, err := ui.ParseSVG([]byte(src))
 	if err != nil {

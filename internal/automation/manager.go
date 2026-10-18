@@ -204,8 +204,27 @@ func (m *Manager) Fire(ev Event) {
 
 func (m *Manager) loop() {
 	defer m.wg.Done()
-	tick := time.NewTicker(time.Second)
-	defer tick.Stop()
+	// 每秒的检查只在有需要轮询的规则（时间、电源、应用、Wi-Fi）时运行；
+	// 没有这类规则时完全不唤醒
+	var tick *time.Ticker
+	var tickC <-chan time.Time
+	retick := func() {
+		need := m.needs(KindTime) || m.needs(KindPower) || m.needs(KindApp) || m.needs(KindWiFi)
+		switch {
+		case need && tick == nil:
+			tick = time.NewTicker(time.Second)
+			tickC = tick.C
+		case !need && tick != nil:
+			tick.Stop()
+			tick, tickC = nil, nil
+		}
+	}
+	defer func() {
+		if tick != nil {
+			tick.Stop()
+		}
+	}()
+	retick()
 	m.poll(true)
 	for {
 		select {
@@ -213,10 +232,11 @@ func (m *Manager) loop() {
 			return
 		case <-m.reload:
 			m.apply()
+			retick()
 			m.poll(true)
 		case ev := <-m.events:
 			m.handle(ev)
-		case <-tick.C:
+		case <-tickC:
 			m.tick(m.cfg.Now())
 			m.poll(false)
 		}
@@ -284,6 +304,21 @@ func (m *Manager) apply() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rules = rules
+	// 删掉的规则不再保留限流与时间触发的记账
+	live := map[string]bool{}
+	for _, r := range rules {
+		live[r.ID] = true
+	}
+	for id := range m.lastFire {
+		if !live[id] {
+			delete(m.lastFire, id)
+		}
+	}
+	for id := range m.minuteKey {
+		if !live[id] {
+			delete(m.minuteKey, id)
+		}
+	}
 	m.applyWatches(paths)
 	if fp.String() == m.regKey {
 		return

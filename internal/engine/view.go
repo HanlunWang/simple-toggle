@@ -59,9 +59,12 @@ func (e *Engine) viewLocked(id string) View {
 	if !r.busySince.IsZero() {
 		v.RunningFor = time.Since(r.busySince)
 	}
-	if v.LastRun == nil {
+	// 重启后第一次需要时从记录里找一次，结果记在 rt 上：不必每次 List 都扫一遍几千条记录
+	if v.LastRun == nil && !r.lastRunLoaded {
+		r.lastRunLoaded = true
 		if runs := e.cfg.Store.Runs(store.Filter{Switch: id, Limit: 1}); len(runs) > 0 {
-			v.LastRun = &runs[0]
+			r.lastRun = &runs[0]
+			v.LastRun = r.lastRun
 		}
 	}
 	return v

@@ -106,6 +106,12 @@ func (f *fakeBackend) Runs(flt store.Filter) []store.Run {
 	return out
 }
 
+func (f *fakeBackend) Usage() store.Usage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return store.UsageFromRuns(f.runs)
+}
+
 func (f *fakeBackend) ClearRuns() error {
 	f.log("clear runs")
 	f.mu.Lock()

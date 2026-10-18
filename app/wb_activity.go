@@ -59,11 +59,11 @@ func (w *workbench) activityFilters(c *ui.Context) {
 				label = sourceLabel(f)
 			}
 			n := counts[f]
-			item := pal.navItem(c, "af-"+f, "", label, w.actFilter == f, false, func() {
+			item := pal.navItem(c, "af-"+f, "", label, w.actTab == 1 && w.actFilter == f, false, func() {
 				pal.mono(c, itoa(n), 11, pal.T3)
 			})
 			if item.Clicked() {
-				w.actFilter, w.runSel = f, 0
+				w.actFilter, w.runSel, w.actTab = f, 0, 1
 			}
 		}
 	})
@@ -79,7 +79,12 @@ func (w *workbench) activity(c *ui.Context) {
 		ui.Row(c).Grow(1).Gap(7).AlignItems(ui.Center).Children(func() {
 			icon(c, "activity", 15).TextColor(pal.T1)
 			ui.Text(c, tr("act_title")).FontSize(13).FontWeight(500).TextColor(pal.T1)
-			pal.mono(c, fmt.Sprintf(tr("act_n"), len(runs)), 12, pal.T3)
+			ui.Row(c).Width(150).Margin(0, 6).Children(func() {
+				w.actTab = pal.segmented(c, "act-tab", w.actTab, tr("st_overview"), tr("st_records"))
+			})
+			if w.actTab == 1 {
+				pal.mono(c, fmt.Sprintf(tr("act_n"), len(runs)), 12, pal.T3)
+			}
 			if w.notice != "" {
 				col := pal.T2
 				if w.noticeErr {
@@ -88,7 +93,7 @@ func (w *workbench) activity(c *ui.Context) {
 				ui.Text(c, w.notice).FontSize(11.5).TextColor(col).SingleLine().MinWidth(0)
 			}
 		})
-		if pal.button(c, "export", tr("act_export"), "download", btnGhost, len(runs) == 0).Clicked() && len(runs) > 0 && w.exportRuns != nil {
+		if w.actTab == 1 && pal.button(c, "export", tr("act_export"), "download", btnGhost, len(runs) == 0).Clicked() && len(runs) > 0 && w.exportRuns != nil {
 			w.exportRuns(append([]store.Run(nil), runs...))
 		}
 		if pal.button(c, "clear", tr("act_clear"), "", btnGhost, len(w.runs) == 0).Clicked() && len(w.runs) > 0 {
@@ -98,8 +103,12 @@ func (w *workbench) activity(c *ui.Context) {
 	if w.clearOpen {
 		if ui.AlertDialog(c.Key("clear-dialog"), &w.clearOpen, tr("act_clear_title"), tr("act_clear_msg"), tr("cancel"), tr("act_clear")) == 1 {
 			_ = w.b.ClearRuns()
-			w.runsDirty = true
+			w.runsDirty, w.usageDirty, w.statItem = true, true, ""
 		}
+	}
+	if w.actTab == 0 {
+		w.statsPage(c)
+		return
 	}
 	if len(runs) == 0 {
 		ui.Column(c).Grow(1).FillWidth().AlignItems(ui.Center).Justify(ui.Center).Children(func() {

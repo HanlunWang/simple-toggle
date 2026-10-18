@@ -239,7 +239,7 @@ func (w *workbench) sceneEditor(c *ui.Context) {
 			pal.hair(c)
 			w.cardRow(c, tr("scene_restore"), tr("scene_restore_h"), func() {
 				on := sc.Restore
-				ui.Switch(c.Key("sc-restore"), &on).Label(tr("scene_restore"))
+				w.pal.toggle(c, "sc-restore", &on, false, false).Label(tr("scene_restore"))
 				if on != sc.Restore {
 					sc.Restore = on
 					w.saveScene(sc)
@@ -248,7 +248,7 @@ func (w *workbench) sceneEditor(c *ui.Context) {
 			pal.hair(c)
 			w.cardRow(c, tr("scene_show"), fmt.Sprintf(tr("scene_show_h"), sc.Name), func() {
 				on := sc.ShowName
-				ui.Switch(c.Key("sc-show"), &on).Label(tr("scene_show"))
+				w.pal.toggle(c, "sc-show", &on, false, false).Label(tr("scene_show"))
 				if on != sc.ShowName {
 					sc.ShowName = on
 					w.saveScene(sc)
