@@ -367,6 +367,9 @@ func (c *controller) togglePanel() {
 		p.revealed = true
 		// 整个窗口（连同玻璃材质）从上方 6pt 淡入落下，由 Core Animation 插值
 		darwin.RevealWindow(fl.NativeHandle(), 0.22, 6, p.lessMotion)
+		// revealed 变了要立刻重画一帧：行的入场动画以它为目标，
+		// 不重画的话要等鼠标移进面板（悬停触发重画）开关才会出现
+		fl.Invalidate()
 	}
 	p.reveal = func() { go mygo.RunOnMain(reveal) }
 	// 兜底：万一没有等到按真实高度画的那一帧（例如窗口透明时系统不让它绘制），也要显示出来
