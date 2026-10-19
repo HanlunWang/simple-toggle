@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -497,16 +498,11 @@ func (w *workbench) statHours(c *ui.Context, sv statsView) {
 	w.setHover(c, "hours", hoverNote)
 }
 
-var sourceColors = map[string]string{
-	"manual": "#5b8cff", "shortcut": "#9b85ff", "scene": "#4cb38a", "automation": "#d9a441",
-	"ai": "#ff6a2b", "cli": "#7f8c8d", "api": "#3fb6c6",
-}
+// sourceShades 是来源分布的单色深浅：次数最多的来源最亮，往后逐级变淡。
+var sourceShades = []float32{1, 0.72, 0.52, 0.38, 0.28, 0.2, 0.14}
 
-func (p palette) sourceColor(src string) ui.Color {
-	if hex, ok := sourceColors[src]; ok {
-		return ui.Hex(hex)
-	}
-	return p.L4
+func (p palette) sourceShade(rank int) ui.Color {
+	return alpha(p.Accent, sourceShades[min(rank, len(sourceShades)-1)])
 }
 
 // statSources 是按来源的分布：一条堆叠条 + 图例。
@@ -521,11 +517,13 @@ func (w *workbench) statSources(c *ui.Context, sv statsView) {
 		}
 	}
 	for s, n := range sv.sources { // 未知来源放最后
-		if _, known := sourceColors[s]; !known && n > 0 && !contains(order, s) {
+		if n > 0 && !contains(order, s) {
 			order = append(order, s)
 			total += n
 		}
 	}
+	// 按次数从多到少排，深浅随名次（相同次数保持原顺序）
+	sort.SliceStable(order, func(i, j int) bool { return sv.sources[order[i]] > sv.sources[order[j]] })
 	w.statCard(c, "c-src", tr("st_sources"), pick(w.statItem != "", tr("st_hours_all"), ""), func() {
 		bar := ui.Box(c.Key("src-bar")).FillWidth().Height(10).Radius(5).Clip().Background(pal.L2)
 		bar.Draw(func(p *ui.Painter, r ui.Rect) {
@@ -533,17 +531,17 @@ func (w *workbench) statSources(c *ui.Context, sv statsView) {
 				return
 			}
 			x := r.X
-			for _, s := range order {
+			for i, s := range order {
 				wd := r.W * float32(sv.sources[s]) / float32(total)
-				p.Fill(ui.Rect{X: x, Y: r.Y, W: max(wd-1.5, 1), H: r.H}, pal.sourceColor(s), 0)
+				p.Fill(ui.Rect{X: x, Y: r.Y, W: max(wd-1.5, 1), H: r.H}, pal.sourceShade(i), 0)
 				x += wd
 			}
 		})
 		ui.Column(c).FillWidth().Gap(6).Children(func() {
-			for _, s := range order {
+			for i, s := range order {
 				n := sv.sources[s]
 				ui.Row(c.Key("src-" + s)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-					ui.Box(c).Size(8, 8).Radius(4).Background(pal.sourceColor(s))
+					ui.Box(c).Size(8, 8).Radius(4).Background(pal.sourceShade(i))
 					ui.Text(c, sourceLabel(s)).FontSize(12).TextColor(pal.T1).Grow(1).SingleLine()
 					pal.mono(c, itoa(n), 11.5, pal.T2)
 					pal.mono(c, fmt.Sprintf("%3.0f%%", 100*float64(n)/float64(max(total, 1))), 11, pal.T3)

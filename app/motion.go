@@ -20,14 +20,25 @@ var (
 	// animSlide 是选中块在条目之间滑动
 	animSlide = ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.08}}
 
+	// animResize 是面板窗口跟着内容变高 / 变矮，与 motionRow 同一节奏
+	animResize = ui.Animation{Duration: 220 * time.Millisecond, Ease: ui.EaseInOut}
+
+	// animInstant 让数值直接到位（用来与已在逐帧变化的布局保持同步）
+	animInstant = ui.Animation{Duration: time.Nanosecond}
+
 	// motionReveal 是展开 / 收起的区块：高度从 0 长出并淡入。
 	motionReveal = ui.ElementTransition{
-		Duration: 200 * time.Millisecond, Ease: ui.EaseInOut,
+		Duration: 220 * time.Millisecond, Ease: ui.EaseInOut, Colors: true, // 只管进出场，尺寸跟着布局走
 		Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true},
 	}
 	// motionRow 是列表行：增删时收拢，换位时滑到新位置。
 	motionRow = ui.ElementTransition{
 		Duration: 220 * time.Millisecond, Ease: ui.EaseInOut, Position: true,
+		Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true},
+	}
+	// motionRowStill 是只做增删、不做位置过渡的列表行（位置交给正在变化的布局）
+	motionRowStill = ui.ElementTransition{
+		Duration: 220 * time.Millisecond, Ease: ui.EaseInOut, Colors: true,
 		Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true},
 	}
 	// motionPage 是切换分区时主区内容的淡入与轻微上移。

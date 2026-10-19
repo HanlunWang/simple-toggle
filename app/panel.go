@@ -31,6 +31,8 @@ type panel struct {
 	query     string
 	searching bool
 	expanded  string
+	expanding bool               // 本帧有参数区正在展开或收起
+	paramsH   map[string]float32 // 各开关参数区的完整高度（上一帧量到的）
 	collapsed map[string]bool
 	pending   map[string]bool      // 刚发出的 on / off 的目标值，状态回来前用它显示开关
 	edits     map[string]string    // 参数输入框的编辑中内容
@@ -62,7 +64,7 @@ func newPanel(b Backend, prefs Prefs) *panel {
 	return &panel{
 		b: b, prefs: prefs, dirty: true,
 		collapsed: map[string]bool{}, pending: map[string]bool{}, edits: map[string]string{}, flash: map[string]time.Time{},
-		armed:     map[string]time.Time{},
+		armed: map[string]time.Time{}, paramsH: map[string]float32{},
 		sceneBusy: map[string]bool{},
 		axTrusted: func() bool { return true }, reduceTransparency: func() bool { return false },
 	}
@@ -171,6 +173,11 @@ func (p *panel) view(c *ui.Context) {
 	// 读的是上一帧的尺寸，内容不变时不再触发。
 	if p.resize != nil && inner.Bounds().H > 0 {
 		h := top.Bounds().H + min(inner.Bounds().H, maxBody) + bottom.Bounds().H
+		// 显示之后的高度变化（搜索、增删行）：窗口按和内容相同的节奏逐帧长高或收起，不一下跳到终点。
+		// 参数区展开 / 收起时内容高度本身已在逐帧变化，窗口直接跟上，不再叠一层动画。
+		if p.revealed && !p.lessMotion {
+			h = root.AnimateTo("win-h", h, pick(p.expanding, animInstant, animResize))
+		}
 		if math.Abs(float64(h-p.lastHeight)) > 0.5 {
 			p.lastHeight = h
 			p.targetH = p.resize(h)
@@ -307,6 +314,7 @@ func (p *panel) entrance(e ui.Element) {
 func (p *panel) body(c *ui.Context) {
 	pal := p.pal
 	p.rowIdx = 0
+	p.expanding = false
 	list := p.visible()
 	ui.Column(c).FillWidth().Padding(4, 6, 6).Gap(0).Children(func() {
 		if len(list) == 0 {
@@ -572,8 +580,18 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 	if compact {
 		h = 34
 	}
-	item := ui.Column(c.Key("item-" + v.ID)).FillWidth().Transition(motionRow)
+	// 上面有参数区正在展开 / 收起时，这一行跟着布局走，不再另做位置过渡（否则会落后于布局）
+	item := ui.Column(c.Key("item-" + v.ID)).FillWidth().Transition(pick(p.expanding, motionRowStill, motionRow))
 	p.entrance(item)
+	// 参数区的展开程度（0–1）：由一个数值驱动高度，下面的行和面板窗口都按同一节奏跟上。
+	// 不用进出场过渡，因为窗口尺寸在变的那几帧里，mygo 不做布局过渡，下面的行会直接跳到终点。
+	k := b2f(open)
+	if !p.lessMotion {
+		k = max(0, min(item.AnimateTo("params", k, animResize), 1))
+	}
+	if k > 0 && k < 1 {
+		p.expanding = true
+	}
 	item.Children(func() {
 		r := ui.Row(c.Key("row-"+v.ID)).FillWidth().Height(h).AlignItems(ui.Center).Gap(10).Padding(0, 8).Radius(8)
 		bg := ui.Transparent
@@ -607,8 +625,16 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 			}
 			p.control(c, v)
 		})
-		if open {
-			p.paramsEditor(c, v)
+		if hasParams && k > 0.001 {
+			wrap := ui.Column(c.Key("pwrap-" + v.ID)).FillWidth().Clip()
+			if k < 0.999 {
+				wrap.Height(p.paramsH[v.ID] * k).Opacity(k)
+			}
+			var ed ui.Element
+			wrap.Children(func() { ed = p.paramsEditor(c, v) })
+			if h := ed.Bounds().H; h > 0 {
+				p.paramsH[v.ID] = h
+			}
 		}
 	})
 }
@@ -725,9 +751,9 @@ func (p *panel) commit(v engine.View, key, value string) {
 	}
 }
 
-func (p *panel) paramsEditor(c *ui.Context, v engine.View) {
+func (p *panel) paramsEditor(c *ui.Context, v engine.View) ui.Element {
 	pal := p.pal
-	ui.Column(c.Key("params-"+v.ID)).FillWidth().Padding(4, 10, 12, 48).Gap(10).Transition(motionReveal).Children(func() {
+	return ui.Column(c.Key("params-"+v.ID)).FillWidth().Shrink(0).Padding(4, 10, 12, 48).Gap(10).Children(func() {
 		for _, pv := range v.Params {
 			pv := pv
 			ui.Column(c.Key("param-" + v.ID + "-" + pv.Key)).FillWidth().Gap(5).Children(func() {
