@@ -88,7 +88,7 @@ func newFakeSettings(views []engine.View) (*settingsHost, *fakeSettings) {
 func TestSettingsWindow(t *testing.T) {
 	h, f := newFakeSettings(sampleViews())
 	s := newSettingsWin(h)
-	tt := ui.NewTester(s.render, 780, 600)
+	tt := ui.NewTester(s.render, 780, 760) // 内容按 Geist 的度量排版，AI 页的按钮在 600 高的窗口里会落到可见区外
 	for _, tab := range settingsTabs {
 		if !tt.HasText(tr("st_" + tab.id)) {
 			t.Fatalf("tab %s missing", tab.id)

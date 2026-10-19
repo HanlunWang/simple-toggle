@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/HanlunWang/simple-toggle/internal/automation"
@@ -133,14 +132,14 @@ func (p *panel) view(c *ui.Context) {
 	p.load()
 	p.lessMotion = c.Preferences().ReduceMotion
 	base := c.Theme()
-	p.pal = newPalette(base.Dark, p.prefs.Accent)
+	p.pal = newPalette(base.Dark, p.prefs.Accent).panelStyle() // 面板是 B（Console）风格
 	c.SetTheme(p.pal.theme(base))
 	pal := p.pal
 
 	c.Root().Background(ui.Transparent)
 	root := ui.Column(c).Fill()
 	if c.Vibrancy() && p.prefs.Material != "solid" && !p.reduceTransparency() {
-		root.Background(alpha(pal.BG, 0.5)) // 在系统材质上叠一层暖色，与设计稿一致
+		root.Background(alpha(pal.BG, 0.66)) // 在系统材质上叠一层底色：玻璃感 + 足够的对比
 	} else {
 		root.Background(pal.BG)
 	}
@@ -214,14 +213,9 @@ func (p *panel) view(c *ui.Context) {
 func (p *panel) header(c *ui.Context) {
 	pal := p.pal
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Padding(12, 12, 8, 16).Children(func() {
-		// 终端风格的标题：等宽小写，前面一个随开关数量发光的提示符
+		// Logo：点阵的 ›（打开时逐点闪亮）+ 等宽小写 simpletoggle
 		n := p.onCount()
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			mark := ui.Text(c.Key("prompt"), "›").Font(monoFont).FontSize(14).FontWeight(600)
-			lit := mark.AnimateTo("lit", b2f(n > 0), animColor)
-			mark.TextColor(pal.T3.Mix(pal.glowColor(), lit))
-			ui.Text(c, "simpletoggle").Font(monoFont).FontSize(12.5).FontWeight(600).TextColor(pal.T1)
-		})
+		pal.brand(c, 12.5)
 		if n > 0 {
 			ui.Text(c.Key("on-count"), fmt.Sprintf(tr("on_count"), n)).Font(monoFont).FontSize(11).TextColor(pal.T3).
 				ContentTransition(ui.ContentTransition{Numeric: true}).
@@ -322,21 +316,19 @@ func (p *panel) body(c *ui.Context) {
 		for _, g := range p.groups(list) {
 			name, views := g.name, g.views
 			if name != "" {
-				h := ui.Row(c.Key("grp-"+name)).FillWidth().Height(28).Padding(4, 10, 0).Gap(6).AlignItems(ui.Center)
+				// 「// 系统 ──────── 3/5」：点一下折叠
+				h := ui.Row(c.Key("grp-"+name)).FillWidth().Height(28).Padding(4, 10, 0).Gap(8).AlignItems(ui.Center).Label(name)
 				h.Children(func() {
-					turn := h.AnimateTo("turn", 90*(1-b2f(p.collapsed[name])), animColor)
-					icon(c, "chevron-right", 11).TextColor(pal.T3).Rotate(turn)
 					pal.caption(c, name)
-					ui.Spacer(c)
-					if p.collapsed[name] {
-						on := 0
-						for _, v := range views {
-							if v.State == engine.On {
-								on++
-							}
+					ui.Box(c).Grow(1).Height(1).Background(pal.L2)
+					on := 0
+					for _, v := range views {
+						if v.Type != contract.Action && v.State == engine.On {
+							on++
 						}
-						ui.Textf(c, "%d/%d", on, len(views)).Font(monoFont).FontSize(10.5).TextColor(pal.T3)
 					}
+					ui.Textf(c, "%d/%d", on, len(views)).Font(monoFont).FontSize(10.5).
+						TextColor(h.AnimateColor("n", pick(p.collapsed[name], pal.T2, pal.T4), animColor))
 				})
 				if h.Clicked() {
 					p.collapsed[name] = !p.collapsed[name]
@@ -392,38 +384,28 @@ func (p *panel) shownOn(v engine.View) bool {
 // 颜色变化有过渡。
 func (p *panel) iconTile(c *ui.Context, v engine.View, compact bool) {
 	pal := p.pal
-	s := float32(30)
+	s := float32(28)
 	if compact {
-		s = 24
+		s = 22
 	}
 	on := p.shownOn(v) && v.Type != contract.Action
-	bg, fg := pal.L2, pal.T2
+	bg, fg, bd, glow := pal.L2, pal.T2, ui.Transparent, alpha(pal.Accent, 0)
 	switch {
 	case v.State == engine.Error || (v.Type == contract.Action && p.lastFailed(v) && p.flashing(v)):
 		bg, fg = alpha(pal.Red, 0.14), pal.Red
 	case v.Type == contract.Action && p.flashing(v):
 		bg, fg = alpha(pal.Green, 0.14), pal.Green
-	case on && pal.Ink:
-		bg, fg = pal.FG, pal.BG
 	case on:
-		bg, fg = alpha(pal.Accent, 0.16), pal.Accent
+		// 开着：信号色的淡底 + 1px 信号色边 + 一圈很淡的光
+		bg, fg, bd, glow = pal.sigSoft(), pal.Accent, pal.sigLine(), pal.glowSoft()
 	case v.Type == contract.Action:
 		fg = pal.T1
 	}
-	t := ui.Row(c.Key("ico-"+v.ID)).Size(s, s).Radius(s * 0.3).Shrink(0).AlignItems(ui.Center).Justify(ui.Center)
-	t.Background(t.AnimateColor("bg", bg, animColor))
-	// 开着的开关：图标块外一圈很淡的光
-	t.Shadow(0, 0, 10, 0, t.AnimateColor("glow", pick(on, alpha(pal.glowColor(), 0.28), alpha(pal.glowColor(), 0)), animColor))
+	t := ui.Row(c.Key("ico-"+v.ID)).Size(s, s).Radius(6).Shrink(0).AlignItems(ui.Center).Justify(ui.Center)
+	t.Background(t.AnimateColor("bg", bg, animColor)).Border(1, t.AnimateColor("bd", bd, animColor)).
+		Shadow(0, 0, 12, 0, t.AnimateColor("glow", glow, animColor))
 	col := t.AnimateColor("fg", fg, animColor)
-	if v.State == engine.Running || v.State == engine.Pending || p.pendingFor(v.ID) {
-		ring := pal.Accent
-		if pal.Ink {
-			ring = pal.FG
-		}
-		pulse := t.Loop("pulse", 1400*time.Millisecond, ui.Linear)
-		t.Border(1.5, alpha(ring, 0.2+0.5*float32(0.5-0.5*math.Cos(2*math.Pi*float64(pulse)))))
-	}
-	t.Children(func() { switchIcon(c, v.Icon, float32(math.Round(float64(s*0.53)))).TextColor(col) })
+	t.Children(func() { switchIcon(c, v.Icon, float32(math.Round(float64(s*0.54)))).TextColor(col) })
 }
 
 // pendingFor 报告是否刚点过、还在等脚本结果。
@@ -498,6 +480,49 @@ func (p *panel) subline(v engine.View) (text string, color ui.Color) {
 	return p.paramSummary(v), color
 }
 
+// sublineView 画名称下面的一行。运行中的常驻开关：九点点阵 + 倒计时 + 进度格；
+// 运行中的按钮：九点点阵 + 计时；其余是等宽的一行字。
+func (p *panel) sublineView(c *ui.Context, v engine.View) {
+	pal := p.pal
+	runningDaemon := v.Type == contract.Daemon && v.State == engine.On && !p.pendingFor(v.ID)
+	runningAction := v.Type == contract.Action && v.State == engine.Running
+	if runningDaemon || runningAction {
+		ui.Row(c.Key("sub")).Gap(6).AlignItems(ui.Center).MinWidth(0).Children(func() {
+			pal.dotRun(c, 9)
+			switch {
+			case runningAction:
+				ui.Textf(c, "%s %.1fs", tr("running"), v.RunningFor.Seconds()).Font(monoFont).FontSize(10.5).TextColor(pal.T2).SingleLine()
+			case v.Remaining != nil:
+				ui.Text(c.Key("cd"), countdown(*v.Remaining)).Font(monoFont).FontSize(10.5).TextColor(pal.T2).SingleLine().
+					ContentTransition(ui.ContentTransition{Numeric: true, Down: true})
+				if total := durationSeconds(v); total > 0 {
+					pal.meter(c, float32(*v.Remaining)/float32(total), 10)
+				}
+			default:
+				ui.Text(c, tr("daemon_running")).Font(monoFont).FontSize(10.5).TextColor(pal.T2).SingleLine()
+			}
+		})
+		return
+	}
+	if sub, col := p.subline(v); sub != "" {
+		ui.Text(c.Key("sub"), sub).Font(monoFont).FontSize(10.5).TextColor(col).SingleLine().Ellipsis("…").
+			ContentTransition(ui.ContentTransition{})
+	}
+}
+
+// durationSeconds 是倒计时的总长（参数 duration，单位分钟）；没有时为 0。
+func durationSeconds(v engine.View) int {
+	for _, pv := range v.Params {
+		if pv.Key == "duration" {
+			n, err := strconv.Atoi(strings.TrimSpace(pv.Value))
+			if err == nil && n > 0 {
+				return n * 60
+			}
+		}
+	}
+	return 0
+}
+
 func lastLine(s string) string {
 	s = strings.TrimRight(s, "\n")
 	if i := strings.LastIndex(s, "\n"); i >= 0 {
@@ -550,7 +575,7 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 	item := ui.Column(c.Key("item-" + v.ID)).FillWidth().Transition(motionRow)
 	p.entrance(item)
 	item.Children(func() {
-		r := ui.Row(c.Key("row-"+v.ID)).FillWidth().Height(h).AlignItems(ui.Center).Gap(10).Padding(0, 8).Radius(11)
+		r := ui.Row(c.Key("row-"+v.ID)).FillWidth().Height(h).AlignItems(ui.Center).Gap(10).Padding(0, 8).Radius(8)
 		bg := ui.Transparent
 		switch {
 		case open:
@@ -563,9 +588,8 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 			p.iconTile(c, v, compact)
 			label := ui.Column(c.Key("label-" + v.ID)).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c, v.Name).FontSize(13).FontWeight(500).TextColor(pal.T1).SingleLine().Ellipsis("…")
-				if sub, col := p.subline(v); sub != "" && !compact {
-					ui.Text(c.Key("sub"), sub).Font(monoFont).FontSize(10.5).TextColor(col).SingleLine().Ellipsis("…").
-						ContentTransition(ui.ContentTransition{})
+				if !compact {
+					p.sublineView(c, v)
 				}
 			})
 			if hasParams {
@@ -592,40 +616,45 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 func (p *panel) control(c *ui.Context, v engine.View) {
 	pal := p.pal
 	if v.Type == contract.Action {
-		btn := ui.Row(c.Key("run-"+v.ID)).Height(24).MinWidth(52).Padding(0, 10).Radius(999).Gap(6).
-			AlignItems(ui.Center).Justify(ui.Center).Border(1, pal.L3).Label(tr("run") + " " + v.Name).
-			Transition(motionColors)
+		// B：方角的小胶囊，等宽字；运行中是九点点阵 + 计时
+		btn := ui.Row(c.Key("run-"+v.ID)).Height(24).MinWidth(56).Padding(0, 9).Radius(5).Gap(6).
+			AlignItems(ui.Center).Justify(ui.Center).Label(tr("run") + " " + v.Name)
 		pressPose(btn, 0.94)
+		bd, bg, glow := pal.L3, ui.Transparent, alpha(pal.Accent, 0)
 		switch {
 		case v.State == engine.Running:
-			btn.Border(1, alpha(pal.Accent, 0.45)).Background(alpha(pal.Accent, 0.08))
-			btn.Children(func() {
-				ui.Spinner(c).Size(12, 12)
-				ui.Textf(c, "%.1fs", v.RunningFor.Seconds()).Font("monospace").FontSize(11.5).TextColor(pal.T1)
-			})
+			bd, bg, glow = pal.sigLine(), pal.sigSoft(), pal.glowSoft()
 		case p.flashing(v) && v.LastRun != nil && v.LastRun.OK:
-			btn.Border(1, alpha(pal.Green, 0.4))
-			btn.Children(func() {
-				icon(c, "check", 13).TextColor(pal.Green)
-				ui.Text(c, tr("done")).FontSize(12).TextColor(pal.Green)
-			})
+			bd = alpha(pal.Green, 0.45)
 		case p.flashing(v) && v.LastRun != nil:
-			btn.Border(1, alpha(pal.Red, 0.4))
-			btn.Children(func() { icon(c, "x", 13).TextColor(pal.Red); ui.Text(c, tr("failed")).FontSize(12).TextColor(pal.Red) })
+			bd = alpha(pal.Red, 0.45)
 		case p.isArmed(v.ID):
-			btn.Border(1, alpha(pal.Amber, 0.5)).Background(alpha(pal.Amber, 0.10))
-			btn.Children(func() { ui.Text(c, tr("confirm_short")).FontSize(12).FontWeight(500).TextColor(pal.Amber) })
-		default:
-			if btn.Hovered() {
-				btn.Background(pal.L1)
-			}
-			btn.Children(func() {
+			bd, bg = alpha(pal.Amber, 0.5), alpha(pal.Amber, 0.10)
+		case btn.Hovered():
+			bg = pal.L1
+		}
+		btn.Background(btn.AnimateColor("bg", bg, animColor)).Border(1, btn.AnimateColor("bd", bd, animColor)).
+			Shadow(0, 0, 9, 0, btn.AnimateColor("glow", glow, animColor))
+		btn.Children(func() {
+			switch {
+			case v.State == engine.Running:
+				pal.dotRun(c, 10)
+				ui.Textf(c, "%.1fs", v.RunningFor.Seconds()).Font(monoFont).FontSize(11).TextColor(pal.T1)
+			case p.flashing(v) && v.LastRun != nil && v.LastRun.OK:
+				icon(c, "check", 13).TextColor(pal.Green)
+				ui.Text(c, tr("done")).Font(monoFont).FontSize(11).TextColor(pal.Green)
+			case p.flashing(v) && v.LastRun != nil:
+				icon(c, "x", 13).TextColor(pal.Red)
+				ui.Text(c, tr("failed")).Font(monoFont).FontSize(11).TextColor(pal.Red)
+			case p.isArmed(v.ID):
+				ui.Text(c, tr("confirm_short")).Font(monoFont).FontSize(11).FontWeight(500).TextColor(pal.Amber)
+			default:
 				icon(c, "play", 11).TextColor(pal.T1)
 				if p.prefs.Density != "compact" {
-					ui.Text(c, tr("run")).FontSize(12).FontWeight(500).TextColor(pal.T1)
+					ui.Text(c, tr("run")).Font(monoFont).FontSize(11).TextColor(pal.T1)
 				}
-			})
-		}
+			}
+		})
 		if btn.Clicked() && v.State != engine.Running {
 			p.press(v)
 		}
@@ -735,22 +764,22 @@ func (p *panel) selectParam(c *ui.Context, v engine.View, pv engine.ParamView) {
 
 func (p *panel) chip(c *ui.Context, key, label string, active bool) bool {
 	pal := p.pal
-	ch := ui.Row(c.Key(key)).Height(24).Padding(0, 10).Radius(999).AlignItems(ui.Center).MaxWidth(240).Label(label)
-	bg, border, col := ui.Transparent, pal.L3, pal.T1
+	ch := ui.Row(c.Key(key)).Height(24).Padding(0, 9).Radius(5).Gap(5).AlignItems(ui.Center).MaxWidth(240).Label(label)
+	bg, border, col, glow := ui.Transparent, pal.L3, pal.T1, alpha(pal.Accent, 0)
 	switch {
-	case active && pal.Ink:
-		bg, border, col = pal.FG, pal.FG, pal.OnAccent
-	case active:
-		bg, border, col = pal.Accent, pal.Accent, pal.OnAccent
+	case active: // B：信号色淡底 + 信号色边 + 微光，前面一个小圆点
+		bg, border, glow = pal.sigSoft(), pal.sigLine(), pal.glowSoft()
 	case ch.Hovered():
 		bg = pal.L1
 	}
-	ch.Background(ch.AnimateColor("bg", bg, animColor)).Border(1, ch.AnimateColor("bd", border, animColor))
-	// 选中的胶囊微微发光（0.5 版的样子）
-	ch.Shadow(0, 0, 8, 0, ch.AnimateColor("glow", pick(active, alpha(pal.glowColor(), 0.30), alpha(pal.glowColor(), 0)), animColor))
+	ch.Background(ch.AnimateColor("bg", bg, animColor)).Border(1, ch.AnimateColor("bd", border, animColor)).
+		Shadow(0, 0, 9, 0, ch.AnimateColor("glow", glow, animColor))
 	pressPose(ch, 0.95)
 	ch.Children(func() {
-		ui.Text(c, label).FontSize(11.5).TextColor(ch.AnimateColor("fg", col, animColor)).SingleLine().Ellipsis("…")
+		if active {
+			ui.Box(c.Key("dot")).Size(5, 5).Radius(2.5).Background(pal.Accent).Transition(ui.ElementTransition{Duration: 160 * time.Millisecond, Enter: &ui.Motion{Scale: 0.2}})
+		}
+		ui.Text(c, label).Font(monoFont).FontSize(11).TextColor(ch.AnimateColor("fg", col, animColor)).SingleLine().Ellipsis("…")
 	})
 	return ch.Clicked()
 }
@@ -837,61 +866,52 @@ func (p *panel) keyParam(c *ui.Context, v engine.View, pv engine.ParamView) {
 
 func (p *panel) tile(c *ui.Context, v engine.View) {
 	pal := p.pal
-	on := p.shownOn(v)
-	t := ui.Column(c.Key("tile-"+v.ID)).Height(78).Padding(10, 11).Radius(14).Justify(ui.SpaceBetween).Label(v.Name)
-	bg, border := pal.L1, pal.L2
+	on := p.shownOn(v) && v.Type != contract.Action
+	busy := v.State == engine.Running || v.State == engine.Pending || p.pendingFor(v.ID)
+	t := ui.Column(c.Key("tile-"+v.ID)).Height(78).Padding(10, 11).Radius(8).Justify(ui.SpaceBetween).Label(v.Name)
+	bg, border, glow := pal.L1, pal.L2, alpha(pal.Accent, 0)
 	switch {
-	case on && v.Type != contract.Action && pal.Ink:
-		bg, border = pal.FG, pal.FG
-	case on && v.Type != contract.Action:
-		bg, border = alpha(pal.Accent, 0.13), alpha(pal.Accent, 0.45)
+	case on:
+		bg, border, glow = pal.sigSoft(), pal.sigLine(), pal.glowSoft()
 	case v.State == engine.Error:
 		bg, border = alpha(pal.Red, 0.08), alpha(pal.Red, 0.4)
-	case v.State == engine.Running || v.State == engine.Pending:
-		border = alpha(pal.Accent, 0.5)
+	case busy:
+		border = pal.sigLine()
 	case t.Hovered():
 		bg = pal.L2
 	}
-	t.Background(t.AnimateColor("bg", bg, animColor)).Border(1, t.AnimateColor("bd", border, animColor))
+	t.Background(t.AnimateColor("bg", bg, animColor)).Border(1, t.AnimateColor("bd", border, animColor)).
+		Shadow(0, 0, 14, 0, t.AnimateColor("glow", glow, animColor))
 	pressPose(t, 0.96)
 	p.entrance(t)
-	fg, sub := pal.T1, pal.T3
-	if on && v.Type != contract.Action && pal.Ink {
-		fg, sub = pal.BG, alpha(pal.BG, 0.7)
-	}
-	fg, sub = t.AnimateColor("fg", fg, animColor), t.AnimateColor("sub", sub, animColor)
 	t.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			ic := fg
-			if on && !pal.Ink && v.Type != contract.Action {
-				ic = pal.Accent
-			}
-			switchIcon(c, v.Icon, 17).TextColor(ic)
+			switchIcon(c, v.Icon, 17).TextColor(t.AnimateColor("ic", pick(on, pal.Accent, pal.T2), animColor))
 			ui.Spacer(c)
 			switch {
-			case v.State == engine.Running || v.State == engine.Pending:
-				ui.Spinner(c).Size(12, 12)
+			case busy:
+				pal.dotRun(c, 9)
 			case v.Type == contract.Action:
-				icon(c, "play", 12).TextColor(sub)
+				icon(c, "play", 12).TextColor(pal.T3)
+			default:
+				pal.mark(c, pick(on, "on", ""))
 			}
 		})
 		ui.Column(c).FillWidth().Gap(1).Children(func() {
-			ui.Text(c, v.Name).FontSize(13).FontWeight(500).TextColor(fg).SingleLine().Ellipsis("…")
+			ui.Text(c, v.Name).FontSize(12.5).FontWeight(500).TextColor(pal.T1).SingleLine().Ellipsis("…")
 			s, col := p.subline(v)
 			if s == "" {
 				switch {
 				case v.Type == contract.Action:
-					s = tr("run")
+					s = "run"
 				case on:
-					s = "ON"
+					s = "on"
 				default:
-					s = "OFF"
+					s = "off"
 				}
-				col = sub
-			} else if col == pal.T3 {
-				col = sub
+				col = pal.T3
 			}
-			ui.Text(c.Key("sub"), s).FontSize(11).TextColor(col).SingleLine().Ellipsis("…").ContentTransition(ui.ContentTransition{})
+			ui.Text(c.Key("sub"), s).Font(monoFont).FontSize(10.5).TextColor(col).SingleLine().Ellipsis("…").ContentTransition(ui.ContentTransition{})
 		})
 	})
 	if t.Clicked() {
@@ -973,26 +993,24 @@ func (p *panel) sceneChip(c *ui.Context, key string, sv engine.SceneView, active
 	if sv.Shortcut != "" {
 		tip += "  " + automation.ShortcutSymbols(sv.Shortcut)
 	}
-	chip := ui.Row(c.Key(key)).Height(26).Padding(0, 11).Radius(999).Gap(6).AlignItems(ui.Center).Tooltip(tip).Label(sv.Name)
-	if active {
-		if pal.Ink {
-			chip.Material(glass.Glass{Tint: pal.FG, Interactive: true})
-		} else {
-			chip.Material(glass.Glass{Tint: pal.Accent, Interactive: true})
-		}
-	} else {
-		chip.Material(glass.Glass{Interactive: true})
+	busy := p.sceneBusy[sv.ID]
+	chip := ui.Row(c.Key(key)).Height(26).Padding(0, 10).Radius(5).Gap(6).AlignItems(ui.Center).Tooltip(tip).Label(sv.Name)
+	bg, border, glow, col := ui.Transparent, pal.L3, alpha(pal.Accent, 0), pal.T1
+	switch {
+	case active:
+		bg, border, glow = pal.sigSoft(), pal.sigLine(), pal.glowSoft()
+	case chip.Hovered():
+		bg = pal.L1
 	}
-	if p.sceneBusy[sv.ID] {
-		chip.Opacity(0.6)
-	}
+	chip.Background(chip.AnimateColor("bg", bg, animColor)).Border(1, chip.AnimateColor("bd", border, animColor)).
+		Shadow(0, 0, 10, 0, chip.AnimateColor("glow", glow, animColor))
+	pressPose(chip, 0.95)
 	chip.Children(func() {
-		col := pal.T1
-		if active {
-			col = pal.OnAccent
-		}
-		if sv.Icon != "" {
-			switchIcon(c, sv.Icon, 13).TextColor(col)
+		switch {
+		case busy:
+			pal.dotRun(c, 10)
+		case sv.Icon != "":
+			switchIcon(c, sv.Icon, 13).TextColor(chip.AnimateColor("ic", pick(active, pal.Accent, pal.T2), animColor))
 		}
 		ui.Text(c, sv.Name).FontSize(12).FontWeight(500).TextColor(col).SingleLine()
 	})

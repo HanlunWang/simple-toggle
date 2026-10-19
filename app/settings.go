@@ -132,9 +132,9 @@ func (s *settingsWin) render(c *ui.Context) {
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		side := ui.Column(c.Key("st-side")).Width(200).Shrink(0).FillHeight()
 		if c.Vibrancy() {
-			side.Background(alpha(pal.Card, 0.55))
+			side.Background(alpha(pal.BG2, 0.6))
 		} else {
-			side.Background(pal.Card)
+			side.Background(pal.BG2)
 		}
 		side.Children(func() {
 			bar := c.TitleBar()
@@ -219,7 +219,7 @@ func (s *settingsWin) group(c *ui.Context, key, label string, fn func(row rowFn)
 		if pal.Dark {
 			bg = pal.Card
 		}
-		ui.Column(c).FillWidth().Radius(10).Border(1, pal.L2).Background(bg).Children(func() {
+		ui.Column(c).FillWidth().Radius(6).Border(1, pal.L2).Background(bg).Children(func() {
 			first := true
 			n := 0
 			fn(func(label, desc string, ctl func()) {
@@ -329,11 +329,6 @@ func (s *settingsWin) general(c *ui.Context) {
 
 // ───────── 外观 ─────────
 
-var accentSwatches = []struct {
-	id  Accent
-	hex string
-}{{AccentInk, ""}, {AccentOrange, "#f54e00"}, {AccentBlue, "#2f6fed"}, {AccentGreen, "#1f8a65"}, {AccentViolet, "#7c5cff"}}
-
 func (s *settingsWin) appearance(c *ui.Context) {
 	pal := s.pal
 	p := s.prefs
@@ -344,7 +339,7 @@ func (s *settingsWin) appearance(c *ui.Context) {
 				mode := mode
 				card := ui.Column(c.Key("theme-" + mode)).Grow(1).Basis(0).Gap(7).AlignItems(ui.Center).Label(tr("theme_" + mode))
 				card.Children(func() {
-					prev := ui.Row(c).FillWidth().Height(76).Radius(9).Clip()
+					prev := ui.Row(c).FillWidth().Height(76).Radius(5).Clip()
 					if p.Theme == mode {
 						if pal.Ink {
 							prev.Border(2, pal.FG)
@@ -367,25 +362,12 @@ func (s *settingsWin) appearance(c *ui.Context) {
 			}
 		})
 	})
+	ui.Column(c.Key("pal-g")).FillWidth().Gap(6).Children(func() {
+		pal.caption(c, tr("accent")).Margin(0, 2)
+		pal.paletteGrid(c, p.Accent, func(a Accent) { s.setPref("palette", string(a)) })
+		pal.hint(c, tr("accent_h")).Margin(0, 2)
+	})
 	s.group(c, "g-look", "", func(row rowFn) {
-		row(tr("accent"), tr("accent_h"), func() {
-			ui.Row(c).Gap(10).Children(func() {
-				for _, sw := range accentSwatches {
-					sw := sw
-					col := pal.FG
-					if sw.hex != "" {
-						col = ui.Hex(sw.hex)
-					}
-					dot := ui.Row(c.Key("acc-"+string(sw.id))).Size(22, 22).Radius(11).Background(col).Label(string(sw.id)).Tooltip(string(sw.id))
-					if p.Accent == sw.id {
-						dot.Border(2, pal.BG).Shadow(0, 0, 0, 2, pal.T1)
-					}
-					if dot.Clicked() {
-						s.setPref("accent", string(sw.id))
-					}
-				}
-			})
-		})
 		row(tr("material"), tr("material_h"), func() {
 			s.seg(c, "material", 150, []string{"glass", "solid"}, []string{tr("mat_glass"), tr("mat_solid")}, p.Material, func(v string) { s.setPref("material", v) })
 		})
@@ -468,7 +450,7 @@ func (s *settingsWin) menubar(c *ui.Context) {
 				st := st
 				card := ui.Column(c.Key("mbs-" + string(st))).Grow(1).Basis(0).Gap(7).AlignItems(ui.Center).Label(tr("mb_" + string(st)))
 				card.Children(func() {
-					prev := ui.Row(c).FillWidth().Height(54).Radius(9).Background(ui.Hex("#2a2a2a")).AlignItems(ui.Center).Justify(ui.Center).Gap(6)
+					prev := ui.Row(c).FillWidth().Height(54).Radius(5).Background(ui.Hex("#2a2a2a")).AlignItems(ui.Center).Justify(ui.Center).Gap(6)
 					if p.MenubarStyle == st {
 						if pal.Ink {
 							prev.Border(2, pal.FG)
@@ -1123,7 +1105,7 @@ func (s *settingsWin) dialogs(c *ui.Context) {
 func planDialog(c *ui.Context, pal palette, open *bool, p integrations.Plan, apply func(integrations.Plan)) {
 	ui.DialogBase(c.Key("plan-dialog"), open, func(backdrop, panel ui.Element) {
 		backdrop.Background(alpha(ui.Hex("#000000"), 0.25))
-		panel.Width(520).Padding(18).Radius(12).Gap(12).Background(pal.Elev).Shadow(0, 12, 32, 0, alpha(ui.Hex("#000000"), 0.25))
+		panel.Width(520).Padding(18).Radius(6).Gap(12).Background(pal.Elev).Shadow(0, 12, 32, 0, alpha(ui.Hex("#000000"), 0.25))
 		panel.Children(func() {
 			ui.Text(c, fmt.Sprintf(tr("cl_confirm_title"), tr("cl_"+p.Client))).FontSize(14).FontWeight(600).TextColor(pal.T1)
 			if len(p.Commands) > 0 {
@@ -1131,7 +1113,7 @@ func planDialog(c *ui.Context, pal palette, open *bool, p integrations.Plan, app
 			} else {
 				ui.Text(c, fmt.Sprintf(tr("cl_confirm_file"), shortenHome(p.File))).FontSize(12.5).TextColor(pal.T2).Wrap()
 			}
-			ui.Scroll(c).FillWidth().MaxHeight(260).Radius(8).Background(pal.L1).Children(func() {
+			ui.Scroll(c).FillWidth().MaxHeight(260).Radius(4).Background(pal.L1).Children(func() {
 				ui.Text(c, p.Describe()).Font("monospace").FontSize(11.5).TextColor(pal.T1).Selectable().Padding(10, 12)
 			})
 			ui.Row(c).FillWidth().Gap(8).Children(func() {

@@ -82,11 +82,8 @@ func (d *doc) paintBand(pal palette) {
 	if !d.hasBand {
 		return
 	}
-	band := pal.L1
-	if pal.Dark {
-		band = alpha(pal.FG, 0.06)
-	}
-	d.st.LineBackgrounds = []editor.LineBackground{{First: d.band[0], Last: d.band[1], Color: band}}
+	// 契约头：一层很淡的信号色
+	d.st.LineBackgrounds = []editor.LineBackground{{First: d.band[0], Last: d.band[1], Color: alpha(pal.Accent, 0.07)}}
 }
 
 // apply 把检查器的修改写回缓冲区：只替换变化的那一段，光标与撤销历史都保留。
@@ -364,7 +361,7 @@ func (w *workbench) switchEditor(c *ui.Context) {
 		w.conflictBanner(c, d)
 	}
 	// 每个开关一个编辑区：在侧栏换开关时新内容淡入
-	ui.Row(c.Key("ed-grid-"+d.id)).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).
+	ui.Row(c.Key("ed-grid-" + d.id)).FillWidth().Grow(1).MinHeight(0).AlignItems(ui.Stretch).
 		Transition(ui.ElementTransition{Duration: 160 * time.Millisecond, Enter: &ui.Motion{}}).Children(func() {
 		ui.Column(c.Key("ed-col")).Grow(1).MinWidth(0).FillHeight().Children(func() {
 			ui.Row(c.Key("band")).FillWidth().Padding(6, 16).Gap(8).AlignItems(ui.Center).Background(pal.BG).Children(func() {
@@ -423,6 +420,19 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 					w.bottomOpen, w.bottomTab = true, 1
 				}
 			}
+			// 常驻开关运行中：信号色的小条，九点点阵 + running（有倒计时就显示剩余时间）
+			if v != nil && v.Type == contract.Daemon && v.State == engine.On {
+				ui.Row(c.Key("running")).Height(22).Padding(0, 8).Radius(4).Gap(7).AlignItems(ui.Center).Background(pal.sigSoft()).
+					Transition(ui.ElementTransition{Duration: 180 * time.Millisecond, Enter: &ui.Motion{Scale: 0.9}, Exit: &ui.Motion{}}).Children(func() {
+					pal.dotRun(c, 10)
+					text := "running"
+					if v.Remaining != nil {
+						text += " · " + countdown(*v.Remaining)
+					}
+					ui.Text(c.Key("rt"), text).Font(monoFont).FontSize(11).TextColor(pal.Accent).SingleLine().
+						ContentTransition(ui.ContentTransition{Numeric: true, Down: true})
+				})
+			}
 			switch {
 			case w.notice != "":
 				col := pal.T2
@@ -431,7 +441,7 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 				}
 				w.noticeLabel(c, col)
 			case d.modified():
-				ui.Text(c, tr("unsaved")).FontSize(11.5).TextColor(pal.T3).SingleLine()
+				ui.Text(c, tr("unsaved")).Font(monoFont).FontSize(11).TextColor(pal.T3).SingleLine()
 			case !w.savedAt[d.id].IsZero():
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 					icon(c, "check", 12).TextColor(pal.Green)
@@ -536,19 +546,24 @@ func (w *workbench) bottomPanel(c *ui.Context, d *doc) {
 		}
 		for i, t := range tabs {
 			sel := w.bottomOpen && w.bottomTab == i
-			tb := ui.Row(c.Key("tab-"+itoa(i))).Height(24).Padding(0, 9).Radius(6).Gap(6).AlignItems(ui.Center).Label(t.label)
-			if sel {
-				tb.Background(pal.L2)
-			}
+			// C：选中的标签下面一条 2px 信号色
+			tb := ui.Row(c.Key("tab-"+itoa(i))).Height(26).Padding(0, 9).Radius(4).Gap(6).AlignItems(ui.Center).Label(t.label)
+			under := tb.AnimateTo("u", b2f(sel), animColor)
+			tb.Draw(func(pt *ui.Painter, r ui.Rect) {
+				if under > 0.01 {
+					pt.Fill(ui.Rect{X: r.X + 8, Y: r.Y + r.H - 2, W: (r.W - 16) * under, H: 2}, pal.Accent, 1)
+				}
+			})
 			col := pal.T3
 			if sel || tb.Hovered() {
 				col = pal.T1
 			}
+			col = tb.AnimateColor("fg", col, animHover)
 			tb.Children(func() {
 				if t.iconName != "" {
 					icon(c, t.iconName, 12).TextColor(col)
 				}
-				ui.Text(c, t.label).FontSize(12).TextColor(col).SingleLine()
+				ui.Text(c, t.label).Font(monoFont).FontSize(11.5).TextColor(col).SingleLine()
 				if t.count >= 0 {
 					pal.countText(c, "n", itoa(t.count)).TextColor(col)
 				}
@@ -596,6 +611,10 @@ func (w *workbench) outputView(c *ui.Context, d *doc) {
 		for i, l := range tailLines(c, pal, outputLines(out), "live") {
 			w.outRow(c, "live-"+itoa(i), l)
 		}
+		ui.Row(c.Key("live-run")).Gap(8).AlignItems(ui.Center).Padding(3, 0).Children(func() {
+			pal.dotRun(c, 10)
+			ui.Text(c, "running").Font(monoFont).FontSize(12).TextColor(pal.Accent)
+		})
 	}
 }
 

@@ -44,17 +44,12 @@ func (w *workbench) field(c *ui.Context, key, value, placeholder string, mono bo
 }
 
 func (w *workbench) inspSection(c *ui.Context, key, title string, trailing func(), body func()) {
-	pal := w.pal
-	ui.Column(c.Key(key)).FillWidth().Padding(14, 16).Gap(10).Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			pal.caption(c, title).Grow(1)
-			if trailing != nil {
-				trailing()
-			}
+	// C：框线区块，小标题压在上边框上（TUI 的 ┌─ 标题 ─┐）
+	ui.Column(c.Key(key)).FillWidth().Padding(10, 14, 4).Children(func() {
+		w.pal.frame(c, "f", title, trailing, func() {
+			ui.Column(c).FillWidth().Gap(10).Children(body)
 		})
-		body()
 	})
-	pal.hair(c)
 }
 
 func (w *workbench) labeled(c *ui.Context, label string, fn func()) {
@@ -137,7 +132,7 @@ func (w *workbench) iconPicker(c *ui.Context, d *doc) {
 // iconButton 是图标按钮加弹出的选择面板（Lucide 搜索 + emoji）。onPick 收到 lucide:<名称> 或 emoji。
 func (w *workbench) iconButton(c *ui.Context, key, current string, open *bool, onPick func(spec string)) {
 	pal := w.pal
-	btn := ui.Row(c.Key(key)).Size(34, 28).Shrink(0).Radius(7).Border(1, pal.L3).AlignItems(ui.Center).Justify(ui.Center).
+	btn := ui.Row(c.Key(key)).Size(34, 28).Shrink(0).Radius(4).Border(1, pal.L3).AlignItems(ui.Center).Justify(ui.Center).
 		Tooltip(tr("f_icon")).Label(tr("f_icon"))
 	if btn.Hovered() || *open {
 		btn.Background(pal.L1)
@@ -297,7 +292,7 @@ func (w *workbench) paramsView(c *ui.Context, d *doc) {
 	for i, p := range params {
 		i, p := i, p
 		open := w.paramOpen == i
-		box := ui.Column(c.Key("param-" + itoa(i))).FillWidth().Radius(8).Clip().Transition(motionRow)
+		box := ui.Column(c.Key("param-" + itoa(i))).FillWidth().Radius(4).Clip().Transition(motionRow)
 		box.Border(1, box.AnimateColor("bd", pick(open, pal.L3, pal.L2), animColor))
 		box.Children(func() {
 			row := ui.Row(c.Key("prow")).FillWidth().Padding(7, 9).Gap(8).AlignItems(ui.Center).Label(p.Key)

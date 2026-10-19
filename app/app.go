@@ -353,7 +353,7 @@ func (c *controller) togglePanel() {
 	c.flyout = mygo.NewFlyout(mygo.FlyoutOptions{
 		Tray: c.tray, Placement: mygo.PlacementBottom, Gap: 6,
 		Width: int(w), Height: int(height + 0.5),
-		Focusable: !c.devPanel, Shadow: true, Vibrancy: mygo.VibrancyPopover, CornerRadius: 16,
+		Focusable: !c.devPanel, Shadow: true, Vibrancy: mygo.VibrancyPopover, CornerRadius: 12,
 		Content: ui.View(p.view),
 	})
 	fl := c.flyout

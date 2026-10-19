@@ -150,7 +150,7 @@ func (w *workbench) statsPage(c *ui.Context) {
 				})
 			})
 			if !sv.any {
-				ui.Column(c).FillWidth().Padding(48, 20).AlignItems(ui.Center).Gap(8).Radius(12).Border(1, pal.L2).Children(func() {
+				ui.Column(c).FillWidth().Padding(48, 20).AlignItems(ui.Center).Gap(8).Radius(6).Border(1, pal.L2).Children(func() {
 					icon(c, "bar-chart-3", 22).TextColor(pal.T3)
 					ui.Text(c, tr("st_empty")).FontSize(12.5).TextColor(pal.T3).Wrap().TextAlign(ui.Center)
 				})
@@ -171,7 +171,7 @@ func (w *workbench) statsPage(c *ui.Context) {
 // statCard 是统计页的卡片：标题、右侧附注、内容。
 func (w *workbench) statCard(c *ui.Context, key, title, note string, body func()) {
 	pal := w.pal
-	ui.Column(c.Key(key)).FillWidth().Padding(14, 16, 16).Gap(12).Radius(12).Border(1, pal.L2).Background(alpha(pal.FG, 0.015)).
+	ui.Column(c.Key(key)).FillWidth().Padding(14, 16, 16).Gap(12).Radius(6).Border(1, pal.L2).Background(alpha(pal.FG, 0.015)).
 		Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
 				pal.caption(c, title)
@@ -189,14 +189,13 @@ func (w *workbench) statKPIs(c *ui.Context, sv statsView) {
 	n := len(sv.days)
 	nk := 0
 	kpi := func(key, label, value, sub string, subCol ui.Color) {
-		card := ui.Column(c.Key(key)).Grow(1).Basis(0).MinWidth(0).Padding(13, 14).Gap(4).Radius(12).Border(1, pal.L2).Background(alpha(pal.FG, 0.015))
+		card := ui.Column(c.Key(key)).Grow(1).Basis(0).MinWidth(0).Padding(13, 14).Gap(7).Radius(pal.rCard()).Border(1, pal.L2).Background(alpha(pal.FG, 0.015))
 		riseIn(card, time.Duration(nk)*45*time.Millisecond)
 		nk++
 		card.Children(func() {
-			pal.caption(c, label).Ellipsis("…")
-			ui.Text(c.Key("v"), value).Font(monoFont).FontSize(22).FontWeight(600).TextColor(pal.T1).SingleLine().Ellipsis("…").
-				ContentTransition(ui.ContentTransition{Numeric: true})
-			ui.Text(c.Key("s"), sub).FontSize(11).TextColor(subCol).SingleLine().Ellipsis("…").ContentTransition(ui.ContentTransition{})
+			pal.caption(c, label)
+			pal.dotNum(c, "v", value, 30, pal.T1).Ellipsis("…") // 点阵大号数字
+			ui.Text(c.Key("s"), sub).Font(monoFont).FontSize(10.5).TextColor(subCol).SingleLine().Ellipsis("…").ContentTransition(ui.ContentTransition{})
 		})
 	}
 	ui.Row(c.Key("kpis")).FillWidth().Gap(10).AlignItems(ui.Stretch).Children(func() {
@@ -325,14 +324,21 @@ func (w *workbench) statDaily(c *ui.Context, sv statsView) {
 				if b.n == 0 {
 					continue
 				}
-				bc := chart.Rect(c.Key("b-"+b.key), x.Band(i), y.Span(0, float64(b.n))).Radius(3).Label(b.tip).
+				// 点阵柱：柱子由一格格圆点堆成（C），直接显示
+				bc := chart.Rect(c.Key("b-"+b.key), x.Band(i), y.Span(0, float64(b.n))).Label(b.tip).
 					Transition(ui.ElementTransition{Duration: 280 * time.Millisecond, Ease: ui.EaseInOut})
-				// 第一次出现时从底部长出来，从左到右错开
-				if g := enterOnce(bc, 420*time.Millisecond, time.Duration(min(i, 60))*7*time.Millisecond); g < 1 {
-					bc.TransformOrigin(0.5, 1).Scale(1, g)
-				}
 				hovered := bc.Hovered()
-				bc.Background(bc.AnimateColor("c", alpha(col, pick(hovered, float32(1), 0.78)), animHover))
+				dotCol := bc.AnimateColor("c", alpha(col, pick(hovered, float32(1), 0.8)), animHover)
+				bc.Draw(func(p *ui.Painter, r ui.Rect) {
+					const pitch, d = 4.0, 2.8
+					cols := max(1, int((r.W+pitch-d)/pitch))
+					off := (r.W - (float32(cols-1)*pitch + d)) / 2
+					for yy := r.Y + r.H - d; yy >= r.Y-0.5; yy -= pitch {
+						for k := 0; k < cols; k++ {
+							p.Fill(ui.Rect{X: r.X + off + float32(k)*pitch, Y: yy, W: d, H: d}, dotCol, d/2)
+						}
+					}
+				})
 				if hovered {
 					hoverNote = b.tip
 				}
@@ -419,7 +425,7 @@ func (w *workbench) statCalendar(c *ui.Context, now time.Time) {
 					if n < 0 {
 						continue
 					}
-					p.Fill(ui.Rect{X: x, Y: r.Y + top + float32(row)*(cell+gap), W: cell, H: cell}, pal.heat(n, hi), 2.5)
+					p.Fill(ui.Rect{X: x, Y: r.Y + top + float32(row)*(cell+gap), W: cell, H: cell}, pal.heat(n, hi), cell/2)
 				}
 			}
 		})
@@ -437,7 +443,7 @@ func (w *workbench) heatLegend(c *ui.Context, hi int) {
 		ui.Spacer(c)
 		ui.Text(c, tr("st_less")).FontSize(10.5).TextColor(pal.T3)
 		for _, n := range []int{0, 1, 2, 3, 4} {
-			ui.Box(c).Size(10, 10).Radius(2.5).Background(pal.heat(n, 4))
+			ui.Box(c).Size(10, 10).Radius(5).Background(pal.heat(n, 4))
 		}
 		ui.Text(c, tr("st_more")).FontSize(10.5).TextColor(pal.T3)
 	})
@@ -481,8 +487,9 @@ func (w *workbench) statHours(c *ui.Context, sv statsView) {
 				if row%2 == 0 {
 					p.Text(r.X, y+1, tr(fmt.Sprintf("wd_%d", row)), 9.5, pal.T3)
 				}
-				for h := 0; h < 24; h++ {
-					p.Fill(ui.Rect{X: r.X + labelW + float32(h)*(cw+gap), Y: y, W: cw, H: 14}, pal.heat(sv.hours[row][h], hi), 2.5)
+				for h := 0; h < 24; h++ { // 圆点：取格子里能放下的最大圆
+					d := min(cw, 14)
+					p.Fill(ui.Rect{X: r.X + labelW + float32(h)*(cw+gap) + (cw-d)/2, Y: y + (14-d)/2, W: d, H: d}, pal.heat(sv.hours[row][h], hi), d/2)
 				}
 			}
 		})
@@ -576,7 +583,7 @@ func (w *workbench) statRanking(c *ui.Context, sv statsView) {
 				}
 				it := it
 				sel := w.statItem == it.ID
-				r := ui.Row(c.Key("rk-"+it.ID)).FillWidth().Height(32).Padding(0, 8).Radius(8).Gap(10).AlignItems(ui.Center).
+				r := ui.Row(c.Key("rk-"+it.ID)).FillWidth().Height(32).Padding(0, 8).Radius(4).Gap(10).AlignItems(ui.Center).
 					Label(w.statName(it.ID)).Transition(motionRow)
 				r.Background(r.AnimateColor("bg", pick(sel, pal.L2, pick(r.Hovered(), pal.L1, ui.Transparent)), animHover))
 				r.Children(func() {
@@ -584,12 +591,23 @@ func (w *workbench) statRanking(c *ui.Context, sv statsView) {
 					ui.Row(c).Width(16).Justify(ui.Center).Children(func() { w.statIcon(c, it.ID, 14) })
 					ui.Text(c, w.statName(it.ID)).FontSize(12.5).TextColor(pal.T1).SingleLine().Ellipsis("…").Width(170)
 					frac := float32(it.Count) / float32(max(hi, 1))
-					track := ui.Box(c).Grow(1).Height(8).Radius(4).Background(pal.L1)
-					// 第一次出现时从左边伸出来（逐行错开），之后数据变化时平滑过渡
-					shown := track.AnimateTo("w", frac, ui.Animation{Duration: 420 * time.Millisecond, Ease: ui.EaseOut}) *
-						enterOnce(track, 520*time.Millisecond, time.Duration(i)*35*time.Millisecond)
+					// 点阵条：一排 30 个点，亮着的点数按比例
+					track := ui.Box(c).Grow(1).Height(6)
+					lit := int(math.Round(float64(frac) * 30))
 					track.Draw(func(p *ui.Painter, rr ui.Rect) {
-						p.Fill(ui.Rect{X: rr.X, Y: rr.Y, W: max(rr.W*shown, 3), H: rr.H}, alpha(col, pick(sel, float32(1), 0.7)), 4)
+						const n = 30
+						pitch := rr.W / n
+						d := min(pitch-1.5, 5)
+						for k := 0; k < n; k++ {
+							c := pal.L2
+							if k < lit {
+								c = alpha(col, pick(sel, float32(1), 0.75))
+								if sel {
+									p.Shadow(ui.Rect{X: rr.X + float32(k)*pitch, Y: rr.Y + (rr.H-d)/2, W: d, H: d}, d/2, 0, 0, 4, 0, pal.glowSoft())
+								}
+							}
+							p.Fill(ui.Rect{X: rr.X + float32(k)*pitch, Y: rr.Y + (rr.H-d)/2, W: d, H: d}, c, d/2)
+						}
 					})
 					pal.mono(c, itoa(it.Count), 11.5, pal.T1).Width(44).TextAlign(ui.End)
 					pal.mono(c, fmt.Sprintf("%.0f%%", 100*float64(it.Count)/float64(max(sv.allTotal, 1))), 11, pal.T3).Width(40).TextAlign(ui.End)

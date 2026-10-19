@@ -9,7 +9,7 @@ import (
 // Prefs 是界面偏好，存在 store 的 settings 里（键为 "ui.<名称>"）。
 type Prefs struct {
 	Theme          string // system | light | dark
-	Accent         Accent
+	Accent         Accent // 配色方案（ui.palette；2.0 的 ui.accent 会换成对应的配色）
 	Layout         string // list | grid
 	Density        string // comfortable | compact
 	Material       string // glass | solid
@@ -54,7 +54,7 @@ func loadPrefs(st *store.Store) Prefs {
 	size, _ := strconv.ParseFloat(get("editorFontSize", "13"), 32)
 	return Prefs{
 		Theme:          get("theme", "system"),
-		Accent:         Accent(get("accent", string(AccentInk))),
+		Accent:         normalizePalette(Accent(get("palette", get("accent", string(PalGraphite))))),
 		Layout:         get("layout", "list"),
 		Density:        get("density", "comfortable"),
 		Material:       get("material", "glass"),

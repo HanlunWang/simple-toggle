@@ -45,6 +45,7 @@ type workbench struct {
 	selected string
 	views    []engine.View
 	dirty    bool
+	loadedAt time.Time
 	docs     map[string]*doc
 	fields   map[string]*fieldState
 
@@ -167,10 +168,11 @@ func (w *workbench) handle(ev engine.Event) {
 }
 
 func (w *workbench) load() {
-	if !w.dirty {
+	if !w.dirty && !(w.ticking() && time.Since(w.loadedAt) >= 900*time.Millisecond) {
 		return
 	}
 	w.dirty = false
+	w.loadedAt = time.Now()
 	w.views = w.b.List()
 	w.scenes = w.b.Scenes()
 	w.changes = w.b.Changes()
@@ -194,6 +196,16 @@ func (w *workbench) load() {
 			delete(w.outputs, id)
 		}
 	}
+}
+
+// ticking 报告是否有正在倒计时的常驻开关（工作台顶栏显示剩余时间）。
+func (w *workbench) ticking() bool {
+	for _, v := range w.views {
+		if v.Remaining != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *workbench) view(id string) *engine.View {
@@ -237,9 +249,9 @@ func (w *workbench) render(c *ui.Context) {
 	root.Children(func() {
 		side := ui.Column(c.Key("side")).Width(236).Shrink(0).FillHeight()
 		if c.Vibrancy() && !w.reduceTransparency() {
-			side.Background(alpha(pal.Card, 0.55))
+			side.Background(alpha(pal.BG2, 0.6))
 		} else {
-			side.Background(pal.Card)
+			side.Background(pal.BG2)
 		}
 		side.Children(func() { w.sidebar(c) })
 		// 分隔线画在主区（不透明）的左边框上：画在透明的根视图上会透出底下的颜色
@@ -281,6 +293,9 @@ func (w *workbench) render(c *ui.Context) {
 				w.closeWin()
 			}
 		}
+	}
+	if w.ticking() {
+		c.After(time.Second) // 倒计时每秒刷新
 	}
 	if w.notice != "" {
 		if d := time.Until(w.noticeAt.Add(4 * time.Second)); d > 0 {
@@ -391,7 +406,7 @@ func (w *workbench) sidebar(c *ui.Context) {
 // menuPanel 给弹出菜单统一外观。
 func (w *workbench) menuPanel(panel ui.Element) {
 	pal := w.pal
-	panel.Width(210).Padding(4).Radius(10).Background(pal.Elev).Border(1, pal.L2).
+	panel.Width(210).Padding(4).Radius(6).Background(pal.Elev).Border(1, pal.L2).
 		Shadow(0, 8, 24, 0, alpha(ui.Hex("#000000"), 0.18)).Gap(1)
 	popIn(panel)
 }
@@ -469,25 +484,27 @@ func (w *workbench) switchList(c *ui.Context) {
 			if name == "" {
 				name = tr("other_group")
 			}
-			ui.Row(c.Key("gh-"+itoa(gi))).FillWidth().Padding(12, 8, 4).Children(func() { pal.caption(c, name) })
+			ui.Row(c.Key("gh-"+itoa(gi))).FillWidth().Padding(12, 14, 4).Children(func() { pal.caption(c, name) })
 		}
 		for _, v := range g.views {
 			v := v
 			sel := w.selected == v.ID
-			r := ui.Row(c.Key("sw-"+v.ID)).FillWidth().Height(30).Padding(0, 4, 0, 8).Radius(7).Gap(8).AlignItems(ui.Center).Label(v.Name).
+			// C：选中时文字是信号色、左边一个 ›；状态是 3×3 小点阵，运行中的常驻开关是九点动画
+			r := ui.Row(c.Key("sw-"+v.ID)).FillWidth().Height(30).Padding(0, 4, 0, 14).Radius(4).Gap(8).AlignItems(ui.Center).Label(v.Name).
 				Transition(motionRow)
 			r.Background(r.AnimateColor("hover", pick(r.Hovered() && !sel, pal.L1, ui.Transparent), animHover))
 			r.Children(func() {
 				if sel {
-					ui.Box(c.Key("sel")).Absolute().Top(0).Left(0).Fill().PassThrough().Radius(7).Background(pal.L2).
+					ui.Text(c.Key("sel"), "›").Font(monoFont).FontSize(13).FontWeight(600).TextColor(pal.Accent).
+						Absolute().Left(3).Top(6).PassThrough().
 						Transition(ui.ElementTransition{Animation: &animSlide, Match: slideMatch{"switch-list"}})
 				}
 				w.stateDot(c, v)
-				col := r.AnimateColor("fg", pick(v.Hidden, pal.T3, pal.T1), animColor)
+				col := r.AnimateColor("fg", pick(sel, pal.Accent, pick(v.Hidden, pal.T3, pal.T1)), animColor)
 				ui.Row(c).Width(16).Justify(ui.Center).Children(func() {
-					switchIcon(c, v.Icon, 14).TextColor(r.AnimateColor("ic", pick(v.Hidden, pal.T3, pal.T2), animColor))
+					switchIcon(c, v.Icon, 14).TextColor(r.AnimateColor("ic", pick(v.Hidden, pal.T4, pal.T2), animColor))
 				})
-				ui.Text(c, v.Name).FontSize(12.5).TextColor(col).SingleLine().Grow(1).MinWidth(0)
+				ui.Text(c, v.Name).Font(monoFont).FontSize(12).TextColor(col).SingleLine().Grow(1).MinWidth(0)
 				if d := w.docs[v.ID]; d != nil && d.modified() {
 					ui.Box(c).Size(6, 6).Radius(3).Background(pal.T2).Tooltip(tr("unsaved"))
 				}
@@ -535,25 +552,20 @@ func (w *workbench) eyeButton(c *ui.Context, v engine.View) {
 	}
 }
 
-// stateDot 是 6px 的状态点：开启为强调色，出错为红色，其余为灰色。
+// stateDot 是状态记号（C：3×3 小点阵）：开启发光、出错为红色、运行中的常驻开关是九点动画。
 func (w *workbench) stateDot(c *ui.Context, v engine.View) {
-	pal := w.pal
-	col := pal.L4
-	switch v.State {
-	case engine.On:
-		col = pal.Accent
-		if pal.Ink {
-			col = pal.FG
-		}
-	case engine.Error:
-		col = pal.Red
-	case engine.Running, engine.Pending:
-		col = pal.Amber
+	state := ""
+	switch {
+	case v.State == engine.Error:
+		state = "err"
+	case v.State == engine.Running || v.State == engine.Pending:
+		state = "run"
+	case v.Type == contract.Daemon && v.State == engine.On:
+		state = "run"
+	case v.Type != contract.Action && v.State == engine.On:
+		state = "on"
 	}
-	if v.Type == contract.Action && v.State != engine.Running && v.State != engine.Error {
-		col = pal.L3
-	}
-	ui.Box(c).Size(6, 6).Radius(3).Shrink(0).Background(col)
+	w.pal.mark(c, state)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

@@ -145,7 +145,7 @@ func (w *workbench) library(c *ui.Context) {
 func (w *workbench) libCard(c *ui.Context, e libEntry, i int) {
 	pal := w.pal
 	sel := w.libSel == e.File
-	card := ui.Column(c.Key("lib-" + e.File)).MinHeight(128).Padding(14).Radius(12).Gap(8).Label(e.header.Name).
+	card := ui.Column(c.Key("lib-" + e.File)).MinHeight(128).Padding(14).Radius(6).Gap(8).Label(e.header.Name).
 		Transition(ui.ElementTransition{Duration: 220 * time.Millisecond, Ease: ui.EaseInOut, Position: true, Size: true,
 			Enter: &ui.Motion{Scale: 0.96}, Exit: &ui.Motion{Scale: 0.96}})
 	bg, border := ui.Transparent, pal.L2

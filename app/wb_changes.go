@@ -63,7 +63,7 @@ func (w *workbench) changeList(c *ui.Context) {
 	}
 	item := func(ch store.Change) {
 		sel := w.selChange == ch.ID
-		r := ui.Row(c.Key("chg-"+ch.ID)).FillWidth().Padding(7, 8).Radius(7).Gap(8).AlignItems(ui.Start).Label(ch.Name)
+		r := ui.Row(c.Key("chg-"+ch.ID)).FillWidth().Padding(7, 8).Radius(4).Gap(8).AlignItems(ui.Start).Label(ch.Name)
 		if sel {
 			r.Background(pal.L2)
 		} else if r.Hovered() {

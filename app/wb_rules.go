@@ -109,32 +109,32 @@ func (w *workbench) ruleList(c *ui.Context) {
 		for _, r := range w.rules {
 			r := r
 			sel := w.selRule == r.ID
-			row := ui.Row(c.Key("rl-"+r.ID)).FillWidth().Padding(7, 8).Radius(7).Gap(8).AlignItems(ui.Start).Label(triggerText(r.Trigger))
-			if sel {
-				row.Background(pal.L2)
-			} else if row.Hovered() {
-				row.Background(pal.L1)
-			}
+			row := ui.Row(c.Key("rl-"+r.ID)).FillWidth().Padding(7, 4, 7, 14).Radius(4).Gap(8).AlignItems(ui.Start).Label(triggerText(r.Trigger)).
+				Transition(motionRow)
+			row.Background(row.AnimateColor("hover", pick(row.Hovered() && !sel, pal.L1, ui.Transparent), animHover))
 			row.Children(func() {
-				col := pal.T1
-				if !r.Enabled {
-					col = pal.T3
+				if sel {
+					ui.Text(c.Key("sel"), "›").Font(monoFont).FontSize(13).FontWeight(600).TextColor(pal.Accent).
+						Absolute().Left(3).Top(6).PassThrough().
+						Transition(ui.ElementTransition{Animation: &animSlide, Match: slideMatch{"rule-list"}})
+				}
+				col := pick(r.Enabled, pal.T1, pal.T3)
+				if sel {
+					col = pal.Accent
 				}
 				ui.Row(c).Width(16).Margin(2, 0, 0, 0).Justify(ui.Center).Children(func() { icon(c, kindIcons[r.Trigger.Kind], 14).TextColor(pal.T2) })
 				ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-					ui.Text(c, triggerText(r.Trigger)).FontSize(12.5).TextColor(col).SingleLine()
+					ui.Text(c, triggerText(r.Trigger)).Font(monoFont).FontSize(12).TextColor(row.AnimateColor("fg", col, animColor)).SingleLine()
 					ui.Text(c, "→ "+actionText(r.Action, w.targetName)).FontSize(11.5).TextColor(pal.T3).SingleLine()
 				})
-				dot := pal.L4
+				state := ""
 				switch {
 				case r.Suspended != "":
-					dot = pal.Amber
-				case r.Enabled && pal.Ink:
-					dot = pal.FG
+					state = "warn"
 				case r.Enabled:
-					dot = pal.Accent
+					state = "on"
 				}
-				ui.Box(c).Size(6, 6).Radius(3).Margin(6, 0, 0, 0).Background(dot)
+				ui.Box(c).Margin(4, 4, 0, 0).Children(func() { pal.mark(c, state) })
 			})
 			if row.Clicked() {
 				w.selRule = r.ID
@@ -252,19 +252,19 @@ func (w *workbench) ruleEditor(c *ui.Context) {
 	}
 	w.page(c, "rule-"+r.ID, func() {
 		if r.Suspended != "" {
-			ui.Row(c).FillWidth().Padding(10, 14).Radius(10).Gap(8).AlignItems(ui.Start).Background(alpha(pal.Amber, 0.12)).Children(func() {
+			ui.Row(c).FillWidth().Padding(10, 14).Radius(6).Gap(8).AlignItems(ui.Start).Background(alpha(pal.Amber, 0.12)).Children(func() {
 				icon(c, "triangle-alert", 14).TextColor(pal.Amber).Margin(1, 0, 0, 0)
 				ui.Text(c, tr("rule_suspended")).FontSize(12.5).TextColor(pal.T1).Wrap().Grow(1).MinWidth(0)
 			})
 		}
 		if note := w.ruleNote[r.ID]; note != "" {
-			ui.Row(c).FillWidth().Padding(8, 14).Radius(10).Gap(8).AlignItems(ui.Center).Background(alpha(pal.Amber, 0.10)).Children(func() {
+			ui.Row(c).FillWidth().Padding(8, 14).Radius(6).Gap(8).AlignItems(ui.Center).Background(alpha(pal.Amber, 0.10)).Children(func() {
 				icon(c, "circle-alert", 14).TextColor(pal.Amber)
 				ui.Text(c, fmt.Sprintf(tr("rule_invalid"), note)).FontSize(12).TextColor(pal.T1).Wrap().Grow(1)
 			})
 		}
 		w.card(c, "rl-when", func() {
-			ui.Text(c, tr("rule_when")).FontSize(12.5).FontWeight(600).TextColor(pal.T1).Margin(12, 14)
+			ui.Row(c).Padding(12, 14).Children(func() { pal.caption(c, tr("rule_when")) })
 			w.kindGrid(c, r)
 			pal.hair(c)
 			ui.Row(c.Key("detail-"+r.Trigger.Kind)).FillWidth().Padding(14, 16).Gap(10).Wrap().AlignItems(ui.Center).Children(func() {
@@ -272,12 +272,12 @@ func (w *workbench) ruleEditor(c *ui.Context) {
 			})
 		})
 		w.card(c, "rl-do", func() {
-			ui.Text(c, tr("rule_do")).FontSize(12.5).FontWeight(600).TextColor(pal.T1).Margin(12, 14, 0)
+			ui.Row(c).Padding(12, 14, 0).Children(func() { pal.caption(c, tr("rule_do")) })
 			ui.Row(c).FillWidth().Padding(10, 16, 14).Gap(10).Wrap().AlignItems(ui.Center).Children(func() { w.actionEditor(c, r) })
 		})
 		w.card(c, "rl-only", func() {
 			ui.Row(c).FillWidth().Padding(12, 14, 0).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, tr("rule_only")).FontSize(12.5).FontWeight(600).TextColor(pal.T1)
+				pal.caption(c, tr("rule_only"))
 				ui.Text(c, tr("rule_only_h")).FontSize(12).TextColor(pal.T3)
 			})
 			ui.Column(c).FillWidth().Padding(10, 16, 14).Gap(10).Children(func() { w.conditionEditor(c, r) })
@@ -317,7 +317,7 @@ func (w *workbench) kindGrid(c *ui.Context, r store.Rule) {
 		for _, k := range automation.Kinds {
 			k := k
 			sel := r.Trigger.Kind == k
-			cell := ui.Column(c.Key("k-" + k)).Padding(10).Radius(10).Gap(6).Label(tr("kind_" + k))
+			cell := ui.Column(c.Key("k-" + k)).Padding(10).Radius(6).Gap(6).Label(tr("kind_" + k))
 			switch {
 			case sel && pal.Ink:
 				cell.Border(1.5, pal.FG).Background(pal.L1)
@@ -688,7 +688,7 @@ func (w *workbench) triggersSection(c *ui.Context, v engine.View) {
 	}
 	for _, r := range mine {
 		r := r
-		row := ui.Row(c.Key("tr-"+r.ID)).FillWidth().Padding(7, 9).Radius(8).Border(1, pal.L2).Gap(8).AlignItems(ui.Center).Label(triggerText(r.Trigger))
+		row := ui.Row(c.Key("tr-"+r.ID)).FillWidth().Padding(7, 9).Radius(4).Border(1, pal.L2).Gap(8).AlignItems(ui.Center).Label(triggerText(r.Trigger))
 		if row.Hovered() {
 			row.Background(pal.L1)
 		}

@@ -82,7 +82,7 @@ func (r *recorder) field(c *ui.Context, pal palette, key, value, issue string) (
 	recording := r.recording == key
 	ui.Column(c.Key(key)).FillWidth().Gap(5).Children(func() {
 		ui.Row(c).FillWidth().Gap(6).AlignItems(ui.Center).Children(func() {
-			b := ui.ButtonBase(c.Key("rec")).MinWidth(110).Height(26).Padding(0, 10).Radius(7).Border(1, pal.L3).
+			b := ui.ButtonBase(c.Key("rec")).MinWidth(110).Height(26).Padding(0, 10).Radius(4).Border(1, pal.L3).
 				AlignItems(ui.Center).Justify(ui.Center).Label(tr("shortcut"))
 			if recording {
 				b.Border(1.5, pal.Accent).Background(alpha(pal.Accent, 0.06))

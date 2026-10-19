@@ -54,22 +54,18 @@ func (w *workbench) sceneList(c *ui.Context) {
 		for _, sv := range w.scenes {
 			sv := sv
 			sel := w.selScene == sv.ID
-			r := ui.Row(c.Key("sc-"+sv.ID)).FillWidth().Height(30).Padding(0, 8).Radius(7).Gap(8).AlignItems(ui.Center).Label(sv.Name)
-			if sel {
-				r.Background(pal.L2)
-			} else if r.Hovered() {
-				r.Background(pal.L1)
-			}
+			r := ui.Row(c.Key("sc-"+sv.ID)).FillWidth().Height(30).Padding(0, 8, 0, 14).Radius(4).Gap(8).AlignItems(ui.Center).Label(sv.Name).
+				Transition(motionRow)
+			r.Background(r.AnimateColor("hover", pick(r.Hovered() && !sel, pal.L1, ui.Transparent), animHover))
 			r.Children(func() {
-				ui.Row(c).Width(16).Justify(ui.Center).Children(func() { switchIcon(c, sceneIcon(sv.Scene), 14).TextColor(pal.T2) })
-				ui.Text(c, sv.Name).FontSize(12.5).TextColor(pal.T1).SingleLine().Grow(1).MinWidth(0)
-				if sv.Active {
-					col := pal.Accent
-					if pal.Ink {
-						col = pal.FG
-					}
-					ui.Box(c).Size(6, 6).Radius(3).Background(col)
+				if sel {
+					ui.Text(c.Key("sel"), "›").Font(monoFont).FontSize(13).FontWeight(600).TextColor(pal.Accent).
+						Absolute().Left(3).Top(6).PassThrough().
+						Transition(ui.ElementTransition{Animation: &animSlide, Match: slideMatch{"scene-list"}})
 				}
+				pal.mark(c, pick(sv.Active, "on", ""))
+				ui.Row(c).Width(16).Justify(ui.Center).Children(func() { switchIcon(c, sceneIcon(sv.Scene), 14).TextColor(pal.T2) })
+				ui.Text(c, sv.Name).Font(monoFont).FontSize(12).TextColor(r.AnimateColor("fg", pick(sel, pal.Accent, pal.T1), animColor)).SingleLine().Grow(1).MinWidth(0)
 				if sv.Shortcut != "" {
 					pal.mono(c, shortcutLabel(sv.Shortcut), 10.5, pal.T3)
 				}
@@ -189,7 +185,7 @@ func (w *workbench) sceneEditor(c *ui.Context) {
 		// 步骤
 		w.card(c, "sc-steps", func() {
 			ui.Row(c).FillWidth().Padding(12, 14).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, tr("scene_on")).FontSize(12.5).FontWeight(600).TextColor(pal.T1).Grow(1)
+				ui.Row(c).Grow(1).Children(func() { pal.caption(c, tr("scene_on")) })
 				ui.Text(c, tr("scene_in_order")).FontSize(12).TextColor(pal.T3)
 			})
 			if len(sc.Steps) == 0 {
@@ -316,7 +312,7 @@ func (w *workbench) card(c *ui.Context, key string, fn func()) {
 	if pal.Dark {
 		bg = pal.Card
 	}
-	ui.Column(c.Key(key)).FillWidth().Radius(12).Border(1, pal.L2).Background(bg).Children(fn)
+	ui.Column(c.Key(key)).FillWidth().Radius(6).Border(1, pal.L2).Background(bg).Children(fn)
 }
 
 // cardRow 是卡片里的一行：左边标题与说明，右边控件。

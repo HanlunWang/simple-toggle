@@ -77,12 +77,12 @@ func (p palette) toggle(c *ui.Context, key string, on *bool, busy bool, compact 
 		rad := r.H / 2
 		// 胶囊：极淡的底、1px 描边；开启时描边换成强调色并带外圈光晕
 		if lit > 0 {
-			pt.Shadow(r, rad, 0, 0, 7, 0, alpha(glow, 0.22*lit*breath))
+			pt.Shadow(r, rad, 0, 0, 9, 0, alpha(glow, 0.24*lit*breath))
 		}
-		pt.Fill(r, alpha(p.FG, 0.03+0.03*hover).Mix(alpha(glow, 0.10), lit), rad)
-		pt.Stroke(r, alpha(p.FG, 0.30+0.10*hover).Mix(alpha(glow, 0.75), lit), rad, 1)
-		// 圆钮
-		in := float32(3)
+		pt.Fill(r, alpha(p.FG, 0.03+0.03*hover).Mix(alpha(glow, 0.14), lit), rad)
+		pt.Stroke(r, alpha(p.FG, 0.30+0.12*hover).Mix(alpha(glow, 0.6), lit), rad, 1)
+		// 圆钮：关时空心描线，开时实心信号色并发光
+		in := float32(4)
 		d := r.H - 2*in
 		kw := d + 4*press // 按下时拉长
 		x := r.X + in + pos*(r.W-2*in-kw)
