@@ -69,10 +69,6 @@ Or download the disk image from [Releases](https://github.com/HanlunWang/simple-
 
 The Homebrew cask also links the `simpletoggle` command. On first launch a short walkthrough lets you pick switches from the library, choose a look and connect AI clients; every step can be skipped.
 
-### Upgrading from OpenToggle 0.5
-
-SimpleToggle was called OpenToggle up to 0.5. Quit OpenToggle, install SimpleToggle, and uninstall OpenToggle (`brew uninstall --cask opentoggle`). On first launch SimpleToggle copies your scripts from `~/.config/open-toggle/switches/` to `~/.config/simple-toggle/switches/` (the old folder is left alone) and imports which switches were on, parameter values, hidden switches and the language. Scripts that use `$OPENTOGGLE_BIN` keep working. Because the app has a new identity, grant Accessibility once more if you use key parameters, and reconnect your AI clients in Settings → AI & Integrations: the command is now `simpletoggle` and the MCP tools are `simpletoggle_*`. The `/v1` API is unchanged.
-
 ## Script contract
 
 A switch is one executable script in `~/.config/simple-toggle/switches/` (changeable in Settings → Advanced), carrying metadata as `# <switch.*>` comments within its first 40 lines.
@@ -168,7 +164,7 @@ simpletoggle version
 - **MCP tools** — list switches, set switches and parameters, run actions, read and write scripts (validated), activate scenes, read automations and run history, check pending changes.
 - **Permissions** — choose what AI agents may do: read, flip switches, write scripts, delete scripts (off by default). Script changes from AI wait for your approval and are shown as a diff in the workbench; you get a notification. These limits guard against agent mistakes; they are not a security boundary, since any program on your Mac can edit the script files.
 - **Skill** — [`skills/simpletoggle/`](skills/simpletoggle/SKILL.md) teaches agents the CLI and the authoring workflow (write → `validate` → `add`/`put` → verify). Install it from Settings → AI & Integrations.
-- **Local API** — `127.0.0.1:43737`, loopback only; requests need the token from `~/.config/simple-toggle/api.json` (except ping and validate; the CLI and MCP read it). `/v1` is compatible with OpenToggle 0.5; `/v2` adds actions, run history, server-sent events, scenes, automations and changes. Every request carries its source and shows up in Activity.
+- **Local API** — `127.0.0.1:43737`, loopback only; requests need the token from `~/.config/simple-toggle/api.json` (except ping and validate; the CLI and MCP read it). `/v1` covers switches and scripts; `/v2` adds actions, run history, server-sent events, scenes, automations and changes. Every request carries its source and shows up in Activity.
 
 ## Deep links
 
@@ -193,7 +189,7 @@ go tool mygo dev                 # run the app with live reload
 go tool mygo build               # signed, notarized app and disk image (needs the signing identity in mygo.json)
 ```
 
-How the pieces fit together is described in [docs/architecture.md](docs/architecture.md). The Swift predecessor, OpenToggle 0.5, is tagged [`v0.5.1`](https://github.com/HanlunWang/simple-toggle/tree/v0.5.1).
+How the pieces fit together is described in [docs/architecture.md](docs/architecture.md).
 
 Bug reports and pull requests are welcome; CI runs gofmt, `go vet`, the tests and the contract lint over every bundled script. To report a security issue, see [SECURITY.md](SECURITY.md).
 

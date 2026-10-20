@@ -40,7 +40,7 @@ internal/engine/           registry, state machine, runner, daemon supervision, 
                            polling, scenes, pending AI changes, event bus
 internal/runner/           process groups, timeouts, output capture
 internal/automation/       triggers, rule evaluation, conditions, conflict policy, rate limits
-internal/store/            state.json, runs.jsonl, usage statistics, import from OpenToggle 0.5
+internal/store/            state.json, runs.jsonl, usage statistics
 internal/api/              HTTP routes (/v1 compatible, /v2), token, request sources, SSE
 internal/cli/              CLI commands
 internal/mcp/              MCP tools (go-sdk)
@@ -61,7 +61,7 @@ Dependencies only point down: `app` → `engine` / `automation` / `store` → `c
 
 **Processes.** Every script runs in its own process group. Stopping sends SIGTERM to the group and SIGKILL after 3 s, which also cleans up anything the script spawned. Daemons are recorded in a PID ledger (`daemons.json`); at launch, leftovers from a crash are stopped after checking the process start time, so a reused PID is never killed by mistake. A small guard process (`simpletoggle __guard`) stops daemons right away if the app itself crashes. Toggle commands and actions time out after 30 s by default; daemons don't. Up to 64 KB of output is captured per run, and the last 8 KB is kept in the run history.
 
-**Environment.** `SWITCH_<KEY>` for each parameter, `SIMPLETOGGLE_BIN`, `SIMPLETOGGLE_TRIGGER` (manual, shortcut, scene, automation, ai, cli), global variables from Settings, and Homebrew's `bin` directories on `PATH`. `OPENTOGGLE_BIN` is still set for scripts written for 0.5.
+**Environment.** `SWITCH_<KEY>` for each parameter, `SIMPLETOGGLE_BIN`, `SIMPLETOGGLE_TRIGGER` (manual, shortcut, scene, automation, ai, cli), global variables from Settings, and Homebrew's `bin` directories on `PATH`.
 
 **Events.** The engine exposes commands (`SetSwitch`, `Run`, `ActivateScene`, `SetParam`, …) and one event stream. The UI, the API's server-sent events, notifications and automations all consume that stream instead of calling each other.
 
@@ -87,7 +87,7 @@ Rules can be limited to days and times. By default a switch you changed by hand 
 
 ## API
 
-The server listens on `127.0.0.1:43737` only. Every request except `ping` and `validate` needs `Authorization: Bearer <token>`, and requests with a foreign `Host` header are rejected. `/v1` matches OpenToggle 0.5; `/v2` adds actions, run history, scenes, automations, pending changes and `GET /v2/events` (server-sent events). Every request carries its source (UI, CLI, MCP, AI client), which drives AI permissions and shows up in Activity. Script changes from AI clients become pending changes that the user approves in the workbench.
+The server listens on `127.0.0.1:43737` only. Every request except `ping` and `validate` needs `Authorization: Bearer <token>`, and requests with a foreign `Host` header are rejected. `/v1` covers switches and scripts; `/v2` adds actions, run history, scenes, automations, pending changes and `GET /v2/events` (server-sent events). Every request carries its source (UI, CLI, MCP, AI client), which drives AI permissions and shows up in Activity. Script changes from AI clients become pending changes that the user approves in the workbench.
 
 ## Releases and updates
 

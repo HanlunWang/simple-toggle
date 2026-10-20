@@ -33,7 +33,5 @@ cask "simpletoggle" do
 
   caveats <<~EOS
     Switch scripts live in ~/.config/simple-toggle/switches/
-    Coming from OpenToggle 0.5? Your scripts are copied over on first launch;
-    then `brew uninstall --cask opentoggle`. Grant Accessibility once more if a switch sends keys.
   EOS
 end

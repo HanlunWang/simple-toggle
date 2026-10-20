@@ -341,9 +341,20 @@ func TestMCP(t *testing.T) {
 	if text, isErr := call("simpletoggle_delete", map[string]any{"id": "lamp"}); !isErr || !strings.Contains(text, "do not allow AI agents to delete scripts") {
 		t.Fatalf("delete should be refused: %s", text)
 	}
-	text, _ = call("simpletoggle_get_runs", map[string]any{"limit": 5})
+	// 改参数会让开着的开关异步重启，那条记录可能排在最前面，所以找到 run_action 的那一条再核对来源
+	text, _ = call("simpletoggle_get_runs", map[string]any{"limit": 20})
 	var runs []map[string]any
-	if json.Unmarshal([]byte(text), &runs) != nil || len(runs) == 0 || runs[0]["source"] != "ai" || runs[0]["detail"] != "e2e-client" {
+	if json.Unmarshal([]byte(text), &runs) != nil {
+		t.Fatalf("get_runs: %s", text)
+	}
+	found := false
+	for _, r := range runs {
+		if r["switch"] == "flush.sh" && r["action"] == "run" {
+			found = r["source"] == "ai" && r["detail"] == "e2e-client"
+			break
+		}
+	}
+	if !found {
 		t.Fatalf("MCP provenance: %s", text)
 	}
 	if text, isErr := call("simpletoggle_get_script", map[string]any{"id": "ghost"}); !isErr || !strings.Contains(text, "no switch") {

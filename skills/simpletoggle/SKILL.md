@@ -7,8 +7,6 @@ description: Control SimpleToggle (macOS menu bar switch manager) and author swi
 
 SimpleToggle turns user scripts into managed menu bar switches on macOS. Talk to it through the `simpletoggle` CLI (the app's own binary) or its MCP server (`simpletoggle mcp`, same operations as tools). Prefer the CLI in a shell. The app must be running for every command except `validate`, `help` and `version`.
 
-SimpleToggle was called OpenToggle up to 0.5 (command `opentoggle`, same script contract without `action` and `lucide:` icons). This skill is for SimpleToggle 2 and later.
-
 ## Operating switches
 
 ```bash
@@ -114,4 +112,4 @@ Scenes are one-click groups of steps (`on` / `off` / `run`), created by the user
 
 ## HTTP API (advanced)
 
-The app serves a local control API on `127.0.0.1:43737`. Every request except `ping` and `validate` needs the token from `~/.config/simple-toggle/api.json` (the CLI and MCP read it automatically). `/v1` is unchanged from OpenToggle 0.5 (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …); 2.0 adds `/v2` (`POST /v2/switches/{id}/run`, `GET /v2/runs`, `GET /v2/events` (SSE), `/v2/scenes`, `/v2/automations`, `/v2/changes`). Use the API directly only when the CLI is unavailable.
+The app serves a local control API on `127.0.0.1:43737`. Every request except `ping` and `validate` needs the token from `~/.config/simple-toggle/api.json` (the CLI and MCP read it automatically). `/v1` covers switches and scripts (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …); 2.0 adds `/v2` (`POST /v2/switches/{id}/run`, `GET /v2/runs`, `GET /v2/events` (SSE), `/v2/scenes`, `/v2/automations`, `/v2/changes`). Use the API directly only when the CLI is unavailable.

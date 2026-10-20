@@ -69,10 +69,6 @@ brew install --cask hanlunwang/tap/simpletoggle
 
 Homebrew 安装时会同时链接 `simpletoggle` 命令。第一次启动有一个简短的引导：从脚本库挑选开关、选择外观、接入 AI 客户端，每一步都可以跳过。
 
-### 从 OpenToggle 0.5 升级
-
-SimpleToggle 在 0.5 及以前叫 OpenToggle。退出 OpenToggle，安装 SimpleToggle，再卸载 OpenToggle（`brew uninstall --cask opentoggle`）。第一次启动时，SimpleToggle 会把 `~/.config/open-toggle/switches/` 里的脚本复制到 `~/.config/simple-toggle/switches/`（旧目录保持不变），并导入哪些开关开着、参数值、隐藏的开关和语言设置。用到 `$OPENTOGGLE_BIN` 的脚本照常可用。因为 app 的身份变了，用到按键参数时需要再授予一次「辅助功能」权限；AI 客户端也要在「设置 → AI 与集成」里重新接入：命令改为 `simpletoggle`，MCP 工具改为 `simpletoggle_*`。`/v1` API 不变。
-
 ## 脚本契约
 
 一个开关就是 `~/.config/simple-toggle/switches/`（可以在「设置 → 高级」里更改）下的一个可执行脚本，前 40 行里用 `# <switch.*>` 注释写元数据。
@@ -168,7 +164,7 @@ simpletoggle version
 - **MCP 工具**——列出开关、开关与改参数、运行按钮、读写脚本（会检查契约）、激活场景、读取自动化与运行记录、查询待确认的修改。
 - **权限**——决定 AI 能做什么：读取、开关、改脚本、删脚本（默认不允许）。AI 改脚本会先等你确认：工作台用差异对比展示，同时发通知。这些限制用来防止 agent 误操作，不是安全边界——本机上的任何程序本来就能直接修改脚本文件。
 - **Skill**——[`skills/simpletoggle/`](skills/simpletoggle/SKILL.md) 教 AI 使用命令行和编写流程（写 → `validate` → `add`/`put` → 验证）。在「设置 → AI 与集成」里安装。
-- **本地 API**——`127.0.0.1:43737`，只监听本机回环；除 ping 与 validate 外，所有请求都需要 `~/.config/simple-toggle/api.json` 里的令牌（命令行与 MCP 会自动读取）。`/v1` 与 OpenToggle 0.5 兼容；`/v2` 新增按钮、运行记录、事件流（SSE）、场景、自动化与待确认修改。每个请求都带来源，并记录在「活动」里。
+- **本地 API**——`127.0.0.1:43737`，只监听本机回环；除 ping 与 validate 外，所有请求都需要 `~/.config/simple-toggle/api.json` 里的令牌（命令行与 MCP 会自动读取）。`/v1` 管理开关与脚本；`/v2` 新增按钮、运行记录、事件流（SSE）、场景、自动化与待确认修改。每个请求都带来源，并记录在「活动」里。
 
 ## 深链接
 
@@ -193,7 +189,7 @@ go tool mygo dev                 # 运行 app，修改后自动重载
 go tool mygo build               # 签名、公证的 app 与磁盘映像（需要 mygo.json 里的签名身份）
 ```
 
-各部分如何组合在一起，见 [docs/architecture.md](docs/architecture.md)（英文）。它的前身 OpenToggle 0.5（Swift）在标签 [`v0.5.1`](https://github.com/HanlunWang/simple-toggle/tree/v0.5.1)。
+各部分如何组合在一起，见 [docs/architecture.md](docs/architecture.md)（英文）。
 
 欢迎提交问题与 PR；CI 会运行 gofmt、`go vet`、全部测试，并按契约检查每个预置脚本。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。
 
