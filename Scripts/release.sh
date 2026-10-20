@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # SimpleToggle 2 发布：测试 → mygo build（通用二进制、Developer ID 签名、公证、装订、
-# 自动更新文件）→ 验收产物 → 输出 cask 需要的 sha256。
+# 自动更新文件）→ 把装订过的 app 放回 dmg 并重新公证 → 验收产物 → 输出 cask 需要的 sha256。
 #
 #   ./Scripts/release.sh            只在本地构建与验收（不上传任何东西）
 #   ./Scripts/release.sh --upload   另外上传到 GitHub 的草稿 Release（检查后再手动发布）
@@ -50,10 +50,35 @@ ARGS=(build -platform darwin/universal)
 [ "$UPLOAD" = 1 ] && ARGS+=(-upload)
 go tool mygo "${ARGS[@]}"
 
-# ---- 验收 ----
 APP="$(find build -maxdepth 3 -name 'SimpleToggle.app' -type d | head -1)"
 DMG="$(find build -maxdepth 2 -name '*.dmg' | head -1)"
 [ -n "$APP" ] && [ -n "$DMG" ] || fail "没有找到构建出的 app 或 dmg（build/）"
+
+# ---- dmg 里的 app 也要带公证票据 ----
+# mygo 只给构建目录里的 app（自动更新用）装订票据，dmg 里那份没有：
+# 联网时 Gatekeeper 会在线查到票据，但离线的 Mac 第一次打开会被拦下。
+# 把装订过的 app 放回 dmg，再给 dmg 重新签名、公证、装订。
+echo "==> Staple the app inside the disk image"
+xcrun stapler validate "$APP" >/dev/null || fail "构建目录里的 app 没有装订票据"
+WORK="$(mktemp -d)"
+trap 'for m in "$WORK/mnt" "$WORK/check"; do hdiutil detach -quiet -force "$m" 2>/dev/null || true; done; rm -rf "$WORK"' EXIT
+hdiutil convert "$DMG" -quiet -format UDRW -o "$WORK/rw.dmg"
+hdiutil resize -quiet -size 300m "$WORK/rw.dmg"
+mkdir "$WORK/mnt"
+hdiutil attach -quiet -readwrite -noverify -noautoopen -nobrowse -mountpoint "$WORK/mnt" "$WORK/rw.dmg"
+rm -rf "$WORK/mnt/SimpleToggle.app"
+ditto "$APP" "$WORK/mnt/SimpleToggle.app"
+rm -rf "$WORK/mnt/.fseventsd" "$WORK/mnt/.Trashes"
+hdiutil detach -quiet "$WORK/mnt"
+hdiutil convert "$WORK/rw.dmg" -quiet -format ULMO -ov -o "$DMG"
+codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait | tail -2
+xcrun stapler staple -q "$DMG"
+if [ "$UPLOAD" = 1 ]; then
+  gh release upload "v${VERSION}" "$DMG" --clobber
+fi
+
+# ---- 验收 ----
 echo "==> Verify $APP"
 [ -f "$APP/Contents/Resources/skills/simpletoggle/SKILL.md" ] || fail "skill 没有打进 app"
 BIN="$APP/Contents/MacOS/SimpleToggle"
@@ -62,6 +87,12 @@ lipo -archs "$BIN" | grep -q arm64 && lipo -archs "$BIN" | grep -q x86_64 || fai
 codesign --verify --deep --strict "$APP"
 spctl -a -vv --type execute "$APP" 2>&1 | grep -q "Notarized Developer ID" || fail "Gatekeeper 没有认出公证"
 xcrun stapler validate "$DMG" >/dev/null || fail "dmg 没有装订公证票据"
+mkdir -p "$WORK/check"
+hdiutil attach -quiet -readonly -nobrowse -mountpoint "$WORK/check" "$DMG"
+INNER_OK=1
+xcrun stapler validate "$WORK/check/SimpleToggle.app" >/dev/null || INNER_OK=0
+hdiutil detach -quiet "$WORK/check"
+[ "$INNER_OK" = 1 ] || fail "dmg 里的 app 没有装订公证票据"
 "$BIN" version | grep -qF "$VERSION" || fail "二进制报告的版本不是 $VERSION"
 find build -name "update-darwin-universal.json" | grep -q . || fail "没有生成自动更新清单（检查私钥配置）"
 

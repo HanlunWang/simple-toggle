@@ -2,4 +2,4 @@
 package version
 
 // Version 可用 -ldflags "-X github.com/HanlunWang/simple-toggle/internal/version.Version=..." 覆盖。
-var Version = "2.0.0-dev"
+var Version = "2.0.1-dev"

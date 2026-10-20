@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- The app inside the disk image now carries its notarization ticket, so it opens on a Mac that is offline
+
 ## 2.0.0
 
 The first release of SimpleToggle.

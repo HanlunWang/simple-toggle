@@ -1,7 +1,7 @@
 {
   "name": "SimpleToggle",
   "identifier": "io.github.hanlunwang.SimpleToggle",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "copyright": "© 2026 Hanlun Wang",
   "icon": "resources/icon.png",
   "main": "./cmd/simpletoggle",
