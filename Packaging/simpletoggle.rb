@@ -10,7 +10,7 @@
 #
 cask "simpletoggle" do
   version "2.0.0"
-  sha256 "REPLACE_WITH_RELEASE_SH_OUTPUT"
+  sha256 "ed20cf75d1ebc939bd9fd40f35d5d599f386bceafe8c8cf1a43cc4b33fb30f14"
 
   url "https://github.com/HanlunWang/simple-toggle/releases/download/v#{version}/SimpleToggle.#{version}.dmg"
   name "SimpleToggle"
