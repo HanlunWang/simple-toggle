@@ -6,7 +6,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 设计语言 v2（designs/simpletoggle-style-lab）：「安静的界面，会发光的状态」。
+// 设计语言 v2：「安静的界面，会发光的状态」。
 // 黑白为底，层级只靠前景色的透明度；一个信号色只用在开启、运行中与焦点上。
 // 菜单栏面板是 B（Console）风格，工作台与其他窗口是柔化的 C（Signal）风格，开关统一用 A 的圆形发光拨杆。
 type palette struct {

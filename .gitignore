@@ -5,3 +5,7 @@
 
 # macOS
 .DS_Store
+
+# Local design prototypes and tool settings
+/designs/
+/.claude/
