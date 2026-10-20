@@ -63,7 +63,8 @@ type settingsHost struct {
 
 	version     string
 	updater     bool
-	checkUpdate func(done func(latest string, err error))
+	checkUpdate func(done func(installed string, err error)) // 检查并安装；installed 为空表示已是最新
+	updateReady func() string                                // 已装好、等待重启的版本
 
 	scriptsDir   func() string
 	chooseDir    func(done func(path string))
@@ -931,12 +932,19 @@ func (s *settingsWin) updates(c *ui.Context) {
 						case latest == "":
 							s.updateMsg = tr("up_to_date")
 						default:
-							s.updateMsg = fmt.Sprintf(tr("update_avail"), latest)
+							s.updateMsg = ""
 						}
 					})
 				})
 			}
 		})
+		if v := callOr(h.updateReady, ""); v != "" {
+			row(fmt.Sprintf(tr("update_ready"), v), "", func() {
+				if pal.button(c, "relaunch-now", tr("restart_now"), "rotate-cw", btnPrimary, false).Clicked() && h.relaunch != nil {
+					h.relaunch()
+				}
+			})
+		}
 		row(tr("auto_update"), tr("auto_update_h"), func() {
 			s.toggle(c, "auto-upd", h.get(keyAutoUpdate) != "false", func(v bool) { h.set(keyAutoUpdate, boolStr(v)) })
 		})
@@ -1131,3 +1139,11 @@ func planDialog(c *ui.Context, pal palette, open *bool, p integrations.Plan, app
 }
 
 var _ = store.ExportFormat
+
+// callOr 调用可能为空的取值函数（测试里的宿主不一定提供）。
+func callOr[T any](f func() T, def T) T {
+	if f == nil {
+		return def
+	}
+	return f()
+}

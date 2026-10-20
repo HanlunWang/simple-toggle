@@ -18,6 +18,8 @@ var zhV21 = map[string]string{
 	"menu_turn_off": "关闭 %s",
 	"src_menubar":   "菜单栏",
 	"unsaved_tip":   "有未保存的修改",
+	"update_ready":  "新版本 %s 已装好，重启后生效",
+	"restart_now":   "立即重启",
 
 	"eye_hide": "在面板中显示（点击隐藏）",
 	"eye_show": "已在面板中隐藏（点击显示）",
@@ -115,6 +117,8 @@ var enV21 = map[string]string{
 	"menu_turn_off": "Turn off %s",
 	"src_menubar":   "menu bar",
 	"unsaved_tip":   "Unsaved changes",
+	"update_ready":  "Version %s is installed and runs after a restart",
+	"restart_now":   "Restart Now",
 
 	"n_problems_one":     "%d problem",
 	"scene_steps_one":    "%d step",

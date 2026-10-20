@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -508,18 +507,11 @@ func (c *controller) settingsHost() *settingsHost {
 
 		version: version.Version,
 		updater: mygo.Updater.Enabled(),
+		// 「立即检查」找到新版本就直接下载安装，装好后可以立即重启
 		checkUpdate: func(done func(string, error)) {
-			go func() {
-				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-				defer cancel()
-				u, err := mygo.Updater.Check(ctx)
-				if err != nil || u == nil {
-					done("", err)
-					return
-				}
-				done(u.Version, nil)
-			}()
+			go func() { done(c.installUpdate()) }()
 		},
+		updateReady: c.upd.readyVersion,
 
 		scriptsDir: c.eng.ScriptsDir,
 		chooseDir: func(done func(string)) {

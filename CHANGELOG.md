@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.2
+
+- Automatic updates now work: SimpleToggle checks a little after launch and every 6 hours, installs verified updates in the background and uses them at the next launch. Check Now in Settings installs right away and offers a restart. Turning off automatic updates also stops the check
+- 2.0.0 and 2.0.1 cannot update themselves: download this version once from the Releases page, or run `brew upgrade --cask --greedy simpletoggle`
+
 ## 2.0.1
 
 - The app inside the disk image now carries its notarization ticket, so it opens on a Mac that is offline

@@ -127,6 +127,7 @@ type extraItem struct {
 }
 
 type controller struct {
+	upd    updates // 自动更新的状态（updates.go）
 	auto   *automation.Manager
 	eng    *engine.Engine
 	srv    *api.Server
@@ -213,6 +214,7 @@ func (c *controller) ready() {
 	}
 
 	c.startAutomation()
+	c.startUpdates()
 	c.notified = map[string]bool{}
 	if c.unclean {
 		c.reportUncleanExit(c.crashDesired)
