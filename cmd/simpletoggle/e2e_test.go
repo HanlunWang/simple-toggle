@@ -245,6 +245,17 @@ func TestWritesNeedToken(t *testing.T) {
 	if string(out) != "401" {
 		t.Fatalf("write without token: %s", out)
 	}
+	// 读也需要令牌；ping 不需要
+	out, _ = exec.Command("/usr/bin/curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+		fmt.Sprintf("http://127.0.0.1:%d/v1/switches", port)).Output()
+	if string(out) != "401" {
+		t.Fatalf("read without token: %s", out)
+	}
+	out, _ = exec.Command("/usr/bin/curl", "-s", "-o", "/dev/null", "-w", "%{http_code}",
+		fmt.Sprintf("http://127.0.0.1:%d/v2/ping", port)).Output()
+	if string(out) != "200" {
+		t.Fatalf("ping without token: %s", out)
+	}
 	fi, err := os.Stat(filepath.Join(in.home, "api.json"))
 	if err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("discovery file: %v %v", err, fi)

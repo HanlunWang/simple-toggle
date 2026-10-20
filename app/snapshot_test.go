@@ -126,7 +126,7 @@ func TestSnapshots(t *testing.T) {
 		save(tt, "rule-suspended"+suffix)
 
 		// 面板的场景栏
-		p := newPanel(b, Prefs{Accent: AccentOrange, Layout: "list", Density: "comfortable", ShowGroups: true, ShowScenes: true})
+		p := newPanel(b, Prefs{Accent: PalPaper, Layout: "list", Density: "comfortable", ShowGroups: true, ShowScenes: true})
 		pt := ui.NewTester(p.view, 340, 420)
 		pt.SetDark(dark)
 		pt.Frame()
@@ -181,9 +181,11 @@ func TestSnapshotsM5(t *testing.T) {
 		o := newOnboarding(&onboardingHost{
 			installed: func(f string) bool { return f == "keep-awake.sh" || f == "dark-mode.sh" },
 			install:   func(string, string) error { return nil },
-			prefs:     func() Prefs { return Prefs{Theme: "system", Accent: AccentInk, Layout: "list", MenubarStyle: trayPill} },
-			setPref:   func(string, string) {},
-			clients:   h.clients, plan: h.plan, apply: h.apply,
+			prefs: func() Prefs {
+				return Prefs{Theme: "system", Accent: PalGraphite, Layout: "list", MenubarStyle: trayPill}
+			},
+			setPref: func(string, string) {},
+			clients: h.clients, plan: h.plan, apply: h.apply,
 			panelShortcut: func() string { return "alt+space" },
 			finish:        func(bool) {},
 		})
@@ -236,7 +238,7 @@ func TestSnapshotsPanel(t *testing.T) {
 			Presets: []contract.Option{{Label: "1 分钟", Value: "60"}, {Label: "4 分钟", Value: "240"}, {Label: "10 分钟", Value: "600"}}}, Value: "240"})
 	for _, dark := range []bool{false, true} {
 		suffix := pick(dark, "-dark", "-light")
-		for _, accent := range []Accent{AccentInk, AccentBlue} {
+		for _, accent := range []Accent{PalGraphite, PalIce} {
 			b := &fakeBackend{views: views}
 			p := newPanel(b, Prefs{Accent: accent, Layout: "list", Density: "comfortable", ShowGroups: true})
 			tt := ui.NewTester(p.view, 340, 560)

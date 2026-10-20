@@ -31,7 +31,7 @@ func newTestWorkbench(t *testing.T) (*workbench, *fakeBackend, *ui.Tester, chan 
 	b := &fakeBackend{}
 	b.setScriptLocked("awake.sh", awakeScript)
 	b.setScriptLocked("flush.sh", flushScript)
-	w := newWorkbench(b, Prefs{Accent: AccentInk, Layout: "list", Density: "comfortable", ShowGroups: true})
+	w := newWorkbench(b, Prefs{Accent: PalGraphite, Layout: "list", Density: "comfortable", ShowGroups: true})
 	q := make(chan func(), 16)
 	w.onMain = func(fn func()) { q <- fn }
 	tt := ui.NewTester(w.render, 1180, 760)

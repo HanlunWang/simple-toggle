@@ -158,6 +158,11 @@ func writeAtomic(path string, data []byte, mode os.FileMode) error {
 		tmp.Close()
 		return err
 	}
+	// 先落盘再改名：断电后不会留下改了名、内容却为空的文件
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}

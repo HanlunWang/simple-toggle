@@ -1,10 +1,7 @@
 package app
 
 import (
-	"bytes"
-	_ "embed"
 	"fmt"
-	"image/png"
 	"slices"
 	"time"
 
@@ -14,21 +11,7 @@ import (
 	"github.com/HanlunWang/simple-toggle/internal/integrations"
 )
 
-// 首次启动引导：五步，每一步都可以跳过（designs/simpletoggle-v2/onboarding.jsx）。
-
-//go:embed icons/appicon.png
-var appIconPNG []byte
-
-var appIconBitmap *ui.Bitmap
-
-func appIcon() *ui.Bitmap {
-	if appIconBitmap == nil {
-		if img, err := png.Decode(bytes.NewReader(appIconPNG)); err == nil {
-			appIconBitmap = ui.NewBitmap(img)
-		}
-	}
-	return appIconBitmap
-}
+// 首次启动引导：五步，每一步都可以跳过。
 
 type onboardingHost struct {
 	installed     func(file string) bool
@@ -126,10 +109,7 @@ func (o *onboarding) p(c *ui.Context, text string) {
 
 func (o *onboarding) intro(c *ui.Context) {
 	pal := o.pal
-	if b := appIcon(); b != nil {
-		pal.brand(c, 20).Margin(0, 0, 18) // Logo：点阵 › + simpletoggle
-		_ = b
-	}
+	pal.brand(c, 20, true).Margin(0, 0, 18) // Logo：点阵 › + simpletoggle
 	o.h1(c, tr("ob_h1"), "")
 	o.p(c, tr("ob_p1"))
 	ui.Row(c).FillWidth().Gap(12).Margin(26, 0, 0).Children(func() {
@@ -166,7 +146,7 @@ func (o *onboarding) intro(c *ui.Context) {
 				switch {
 				case !o.demoRunAt.IsZero() && el < 1300*time.Millisecond:
 					ui.Spinner(c).Size(12, 12)
-					ui.Textf(c, "%.1fs", el.Seconds()).Font("monospace").FontSize(11.5).TextColor(pal.T1)
+					ui.Textf(c, "%.1fs", el.Seconds()).Font(monoFont).FontSize(11.5).TextColor(pal.T1)
 				case !o.demoRunAt.IsZero() && el < 2800*time.Millisecond:
 					icon(c, "check", 13).TextColor(pal.Green)
 					ui.Text(c, tr("done")).FontSize(12).TextColor(pal.Green)
@@ -416,7 +396,7 @@ func (o *onboarding) footer(c *ui.Context) {
 			label = tr("ob_start")
 		case 1:
 			if n := len(o.newPicks()); n > 0 {
-				label = fmt.Sprintf(tr("ob_add_n"), n)
+				label = fmt.Sprintf(trn("ob_add_n", n), n)
 			}
 		case onboardingSteps - 1:
 			label = tr("ob_open_panel")

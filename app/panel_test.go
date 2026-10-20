@@ -105,7 +105,7 @@ func sampleViews() []engine.View {
 
 func newTestPanel(views []engine.View) (*panel, *fakeBackend) {
 	b := &fakeBackend{views: views}
-	p := newPanel(b, Prefs{Accent: AccentInk, Layout: "list", Density: "comfortable", ShowGroups: true, ShowScenes: true})
+	p := newPanel(b, Prefs{Accent: PalGraphite, Layout: "list", Density: "comfortable", ShowGroups: true, ShowScenes: true})
 	return p, b
 }
 
@@ -180,7 +180,7 @@ func TestPanelSearch(t *testing.T) {
 func TestPanelParams(t *testing.T) {
 	p, b := newTestPanel(sampleViews())
 	tt := ui.NewTester(p.view, 340, 620)
-	if err := tt.Click("params"); err != nil { // 第一个带参数的开关（Keep Awake）的展开按钮
+	if err := tt.Click(tr("sec_params")); err != nil { // 第一个带参数的开关（Keep Awake）的展开按钮
 		t.Fatal(err)
 	}
 	tt.Advance(400 * time.Millisecond) // 等展开动画结束

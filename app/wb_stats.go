@@ -216,7 +216,7 @@ func (w *workbench) statKPIs(c *ui.Context, sv statsView) {
 		if w.statItem == "" {
 			top, sub := "—", ""
 			if len(sv.top) > 0 {
-				top, sub = w.statName(sv.top[0].ID), fmt.Sprintf(tr("st_n_times"), sv.top[0].Count)
+				top, sub = w.statName(sv.top[0].ID), fmt.Sprintf(trn("st_n_times", sv.top[0].Count), sv.top[0].Count)
 			}
 			kpi("k-top", tr("st_top"), top, sub, pal.T3)
 			rate, sub := "—", ""
@@ -230,11 +230,11 @@ func (w *workbench) statKPIs(c *ui.Context, sv statsView) {
 			if sv.allTotal > 0 {
 				share = fmt.Sprintf("%.0f%%", 100*float64(sv.total)/float64(sv.allTotal))
 			}
-			kpi("k-share", tr("st_share"), share, fmt.Sprintf(tr("st_of_all"), sv.allTotal), pal.T3)
+			kpi("k-share", tr("st_share"), share, fmt.Sprintf(trn("st_of_all", sv.allTotal), sv.allTotal), pal.T3)
 			peak, sub := "—", ""
 			if i := argmax(sv.counts); i >= 0 && sv.counts[i] > 0 {
 				peak = sv.days[i].Format("01-02")
-				sub = fmt.Sprintf(tr("st_n_times"), sv.counts[i])
+				sub = fmt.Sprintf(trn("st_n_times", sv.counts[i]), sv.counts[i])
 			}
 			kpi("k-peak", tr("st_peak"), peak, sub, pal.T3)
 		}
@@ -382,7 +382,7 @@ func (w *workbench) statCalendar(c *ui.Context, now time.Time) {
 		n := w.itemCount(w.usage.Days[d.Format(store.DayLayout)])
 		counts[i], total, hi = n, total+n, max(hi, n)
 	}
-	note := fmt.Sprintf(tr("st_year_total"), total)
+	note := fmt.Sprintf(trn("st_year_total", total), total)
 	if w.statHoverKey == "cal" {
 		note = w.statHover
 	}
@@ -564,7 +564,7 @@ func contains(list []string, s string) bool {
 func (w *workbench) statRanking(c *ui.Context, sv statsView) {
 	pal := w.pal
 	const limit = 12
-	w.statCard(c, "c-rank", tr("st_rank"), fmt.Sprintf(tr("st_rank_note"), len(sv.top)), func() {
+	w.statCard(c, "c-rank", tr("st_rank"), fmt.Sprintf(trn("st_rank_note", len(sv.top)), len(sv.top)), func() {
 		if len(sv.top) == 0 {
 			pal.hint(c, tr("st_none_in_range"))
 			return

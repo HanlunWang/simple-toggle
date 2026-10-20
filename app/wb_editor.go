@@ -13,7 +13,6 @@ import (
 
 	"github.com/HanlunWang/simple-toggle/internal/contract"
 	"github.com/HanlunWang/simple-toggle/internal/engine"
-	"github.com/HanlunWang/simple-toggle/internal/runner"
 	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
@@ -415,7 +414,7 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 				if d.hasErrors() {
 					tone = "red"
 				}
-				b := ui.Row(c.Key("problems-badge")).Children(func() { pal.badge(c, fmt.Sprintf(tr("n_problems"), n), tone) })
+				b := ui.Row(c.Key("problems-badge")).Children(func() { pal.badge(c, fmt.Sprintf(trn("n_problems", n), n), tone) })
 				if b.Clicked() {
 					w.bottomOpen, w.bottomTab = true, 1
 				}
@@ -425,7 +424,7 @@ func (w *workbench) editorBar(c *ui.Context, d *doc, v *engine.View) {
 				ui.Row(c.Key("running")).Height(22).Padding(0, 8).Radius(4).Gap(7).AlignItems(ui.Center).Background(pal.sigSoft()).
 					Transition(ui.ElementTransition{Duration: 180 * time.Millisecond, Enter: &ui.Motion{Scale: 0.9}, Exit: &ui.Motion{}}).Children(func() {
 					pal.dotRun(c, 10)
-					text := "running"
+					text := tr("w_running")
 					if v.Remaining != nil {
 						text += " · " + countdown(*v.Remaining)
 					}
@@ -613,7 +612,7 @@ func (w *workbench) outputView(c *ui.Context, d *doc) {
 		}
 		ui.Row(c.Key("live-run")).Gap(8).AlignItems(ui.Center).Padding(3, 0).Children(func() {
 			pal.dotRun(c, 10)
-			ui.Text(c, "running").Font(monoFont).FontSize(12).TextColor(pal.Accent)
+			ui.Text(c, tr("w_running")).Font(monoFont).FontSize(12).TextColor(pal.Accent)
 		})
 	}
 }
@@ -625,7 +624,7 @@ func tailLines(c *ui.Context, pal palette, lines []outLine, key string) []outLin
 	if len(lines) <= maxOutRows {
 		return lines
 	}
-	ui.Text(c.Key(key+"-more"), fmt.Sprintf(tr("out_earlier"), len(lines)-maxOutRows)).FontSize(11).TextColor(pal.T3).Margin(2, 0)
+	ui.Text(c.Key(key+"-more"), fmt.Sprintf(trn("out_earlier", len(lines)-maxOutRows), len(lines)-maxOutRows)).FontSize(11).TextColor(pal.T3).Margin(2, 0)
 	return lines[len(lines)-maxOutRows:]
 }
 
@@ -646,7 +645,7 @@ func (w *workbench) outRow(c *ui.Context, key string, l outLine) {
 	if text == "" {
 		text = " "
 	}
-	ui.Text(c.Key(key), text).Font("monospace").FontSize(12).TextColor(col).Wrap().Selectable()
+	ui.Text(c.Key(key), text).Font(monoFont).FontSize(12).TextColor(col).Wrap().Selectable()
 }
 
 func (w *workbench) problemsView(c *ui.Context, d *doc) {
@@ -698,7 +697,7 @@ func (w *workbench) historyView(c *ui.Context, runs []store.Run) {
 			pal.mono(c, r.Time.Local().Format("01-02 15:04:05"), 11.5, pal.T3).Width(110)
 			ui.Text(c, actionLabel(r.Action)).FontSize(12).TextColor(pal.T1).Width(44)
 			pal.badge(c, sourceLabel(r.Source), sourceTone(r.Source))
-			ui.Text(c, r.Detail).FontSize(11.5).TextColor(pal.T3).SingleLine().Grow(1).MinWidth(0)
+			ui.Text(c, detailLabel(r.Detail)).FontSize(11.5).TextColor(pal.T3).SingleLine().Grow(1).MinWidth(0)
 			pal.mono(c, durText(time.Duration(r.Duration)*time.Millisecond), 11.5, pal.T3)
 		})
 	}
@@ -724,5 +723,3 @@ func sourceTone(src string) string {
 	}
 	return ""
 }
-
-var _ = runner.Result{}

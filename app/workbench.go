@@ -14,7 +14,7 @@ import (
 )
 
 // 工作台窗口：侧栏（开关、活动、脚本库）+ 主区。
-// 设计稿：designs/simpletoggle-v2/workbench.jsx。场景与自动化随 M4 加入侧栏。
+// 场景与自动化也在侧栏里。
 
 const (
 	secSwitches    = "switches"
@@ -227,7 +227,13 @@ func (w *workbench) open(section, item string) {
 		w.paramOpen = -1
 		w.iconOpen = false
 	}
+	w.closePopups()
 	w.dirty = true
+}
+
+// closePopups 关掉弹出的菜单与确认框（换条目、换分区或关窗口时），免得它们跟到别的条目上。
+func (w *workbench) closePopups() {
+	w.deleteOpen, w.moreOpen, w.newOpen = false, false, false
 }
 
 func (w *workbench) setNotice(msg string, isErr bool) {
@@ -506,7 +512,7 @@ func (w *workbench) switchList(c *ui.Context) {
 				})
 				ui.Text(c, v.Name).Font(monoFont).FontSize(12).TextColor(col).SingleLine().Grow(1).MinWidth(0)
 				if d := w.docs[v.ID]; d != nil && d.modified() {
-					ui.Box(c).Size(6, 6).Radius(3).Background(pal.T2).Tooltip(tr("unsaved"))
+					ui.Box(c).Size(6, 6).Radius(3).Background(pal.T2).Tooltip(tr("unsaved_tip"))
 				}
 				w.eyeButton(c, v)
 			})
@@ -561,7 +567,7 @@ func (w *workbench) stateDot(c *ui.Context, v engine.View) {
 	case v.State == engine.Running || v.State == engine.Pending:
 		state = "run"
 	case v.Type == contract.Daemon && v.State == engine.On:
-		state = "run"
+		state = "on" // 侧栏里常驻开关开着时只是静态发光；九点动画留给编辑器顶栏，避免长时间重绘
 	case v.Type != contract.Action && v.State == engine.On:
 		state = "on"
 	}

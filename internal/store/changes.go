@@ -3,6 +3,7 @@ package store
 import (
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -52,7 +53,11 @@ func (s *Store) AddChange(c Change) (Change, error) {
 	defer s.mu.Unlock()
 	n := 1
 	for _, x := range s.st.Changes {
-		if v, err := strconv.Atoi(x.ID[len("chg-"):]); err == nil && v >= n {
+		num, ok := strings.CutPrefix(x.ID, "chg-")
+		if !ok {
+			continue // 手工改过的 id 不参与编号
+		}
+		if v, err := strconv.Atoi(num); err == nil && v >= n {
 			n = v + 1
 		}
 	}

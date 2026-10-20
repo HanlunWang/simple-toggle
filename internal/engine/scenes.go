@@ -143,6 +143,9 @@ func (e *Engine) ToggleScene(id string, src Source, detail string) (<-chan store
 
 // ActivateScene 按顺序执行场景的步骤，立即返回；完成后通过通道与运行记录给出结果。
 func (e *Engine) ActivateScene(id string, src Source, detail string) (<-chan store.Run, error) {
+	if e.shuttingDown() {
+		return nil, ErrShuttingDown
+	}
 	sv, ok := e.Scene(id)
 	if !ok {
 		return nil, ErrNoScene
@@ -226,6 +229,9 @@ func (e *Engine) runStep(sc store.Scene, step store.SceneStep, st *sceneState, s
 
 // RestoreScene 把场景成员恢复到激活前的状态（倒序执行），并结束激活状态。
 func (e *Engine) RestoreScene(id string, src Source, detail string) (<-chan store.Run, error) {
+	if e.shuttingDown() {
+		return nil, ErrShuttingDown
+	}
 	sv, ok := e.Scene(id)
 	if !ok {
 		return nil, ErrNoScene

@@ -109,7 +109,10 @@ func (e *Engine) InstallScript(file, content string) error {
 	if err := os.MkdirAll(e.cfg.ScriptsDir, 0o755); err != nil {
 		return err
 	}
-	if err := writeScript(path, content); err != nil {
+	if err := createScriptFile(path, content); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return ErrExists
+		}
 		return err
 	}
 	_ = e.cfg.Store.SetHidden(file, false)

@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/HanlunWang/simple-toggle/internal/runner"
 )
 
 // ledgerEntry 是 PID 账本的一项。v1 的账本只有 {id: pid}，读取时两种格式都认。
@@ -18,11 +21,20 @@ type ledgerEntry struct {
 
 // writeLedger 记下存活的常驻进程。app 崩溃或被强杀时 Shutdown 不会执行，
 // 下次启动据此清理遗留进程（否则 caffeinate 之类会让屏幕一直亮着）。
+// spawn、stopDaemon、superviseDaemon 会并发调用：快照与写入在 ledgerMu 下整体串行，
+// 保证最后落盘的是最新的快照。
 func (e *Engine) writeLedger() {
 	if e.cfg.LedgerPath == "" {
 		return
 	}
+	e.ledgerMu.Lock()
+	defer e.ledgerMu.Unlock()
 	e.mu.Lock()
+	if e.closing {
+		// Shutdown 结束常驻进程后会删除账本；这时再写会把账本留下
+		e.mu.Unlock()
+		return
+	}
 	entries := map[string]ledgerEntry{}
 	for id, r := range e.rts {
 		if r.daemon != nil && r.daemon.Running() {
@@ -35,10 +47,32 @@ func (e *Engine) writeLedger() {
 		return
 	}
 	data, _ := json.Marshal(entries)
-	tmp := e.cfg.LedgerPath + ".tmp"
-	if os.WriteFile(tmp, data, 0o644) == nil {
-		_ = os.Rename(tmp, e.cfg.LedgerPath)
+	_ = writeFileAtomic(e.cfg.LedgerPath, data, 0o644)
+}
+
+// writeFileAtomic 写到同目录的临时文件、落盘后改名：读者只会看到完整的旧文件或新文件。
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		return err
 	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func readLedger(path string) map[string]ledgerEntry {
@@ -86,21 +120,46 @@ func (e *Engine) sweepOrphans() { SweepLedger(e.cfg.LedgerPath, e.cfg.ScriptsDir
 
 // SweepLedger 终止账本里记下的常驻进程并删除账本，返回终止了几个。
 // 启动时（清理上次崩溃的遗留）和守护进程（app 意外退出的那一刻）都用它。
+// 先 SIGTERM，宽限期（runner.KillGrace）后仍在的 SIGKILL。
 func SweepLedger(path, scriptsDir string) int {
 	entries := readLedger(path)
-	n := 0
+	// target 是信号目标：负数为整个进程组
+	var targets []int
 	for _, ent := range entries {
 		if ent.PID <= 1 || !ownedByUs(ent, scriptsDir) {
 			continue
 		}
 		// v2 启动的进程自成进程组，整组终止；v1 的不是组长，只能终止进程本身
-		if syscall.Kill(-ent.PID, syscall.SIGTERM) != nil {
-			_ = syscall.Kill(ent.PID, syscall.SIGTERM)
+		target := -ent.PID
+		if syscall.Kill(target, syscall.SIGTERM) != nil {
+			target = ent.PID
+			_ = syscall.Kill(target, syscall.SIGTERM)
 		}
-		n++
+		targets = append(targets, target)
 	}
+	n := len(targets)
 	if entries != nil {
 		_ = os.Remove(path)
+	}
+	deadline := time.Now().Add(runner.KillGrace)
+	for len(targets) > 0 {
+		alive := targets[:0]
+		for _, t := range targets {
+			if syscall.Kill(t, 0) == nil {
+				alive = append(alive, t)
+			}
+		}
+		targets = alive
+		if len(targets) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			for _, t := range targets {
+				_ = syscall.Kill(t, syscall.SIGKILL)
+			}
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	return n
 }

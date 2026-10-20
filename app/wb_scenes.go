@@ -132,7 +132,7 @@ func (w *workbench) sceneEditor(c *ui.Context) {
 		ui.Row(c).Grow(1).MinWidth(0).Gap(7).AlignItems(ui.Center).Children(func() {
 			switchIcon(c, sceneIcon(sc), 15).TextColor(pal.T1)
 			ui.Text(c, sc.Name).FontSize(13).FontWeight(500).TextColor(pal.T1).SingleLine().MinWidth(0)
-			pal.mono(c, fmt.Sprintf(tr("scene_steps"), len(sc.Steps)), 12, pal.T3)
+			pal.mono(c, fmt.Sprintf(trn("scene_steps", len(sc.Steps)), len(sc.Steps)), 12, pal.T3)
 			if sv.Active {
 				pal.badge(c, tr("scene_active"), "accent")
 			}

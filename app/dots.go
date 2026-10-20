@@ -33,7 +33,7 @@ func inward(phase float64) float32 {
 }
 
 // dotRun 是「运行中」：3×3 九点点阵，四角 → 四边 → 中心依次亮起再一起暗下，循环（1.4 秒一轮）。
-// 动画只在绘制时计算，不重建视图；size 是点阵的边长。
+// 动画只在绘制时计算，不重建视图；每秒重绘 20 次就足够平滑，常驻开关开几个小时也不费电。size 是点阵的边长。
 func (p palette) dotRun(c *ui.Context, size float32) ui.Element {
 	d := size / 3.8
 	g := (size - 3*d) / 2
@@ -51,7 +51,7 @@ func (p palette) dotRun(c *ui.Context, size float32) ui.Element {
 			}
 			pt.Fill(dot, alpha(p.Accent, a), d/2)
 		}
-		pt.AnimationFrame()
+		pt.After(50 * time.Millisecond)
 	})
 }
 
@@ -117,15 +117,19 @@ func lampOn(t float64) float32 {
 	return 1
 }
 
-// brand 是 Logo：点阵的 ›（出现时像指示灯一样逐点闪亮）+ 等宽小写 simpletoggle。
-func (p palette) brand(c *ui.Context, size float32) ui.Element {
+// brand 是 Logo：点阵的 › + 等宽小写 simpletoggle。flicker 时 › 出现时像指示灯一样逐点闪亮
+// （引导页）；菜单栏面板每次打开都会出现，直接显示。
+func (p palette) brand(c *ui.Context, size float32, flicker bool) ui.Element {
 	return ui.Row(c.Key("brand")).Gap(size * 0.55).AlignItems(ui.Center).Children(func() {
 		dot := size * 0.19
 		gap := size * 0.085
 		w, h := 4*dot+3*gap, 5*dot+4*gap
 		lamp := ui.Box(c.Key("prompt")).Size(w, h).Shrink(0)
 		// 一次性的通电动画：0.95 秒内各点按错开的时刻闪亮（只在第一次出现时播放）
-		k := lamp.Keyframes("on", []ui.Keyframe{{Value: 0}, {At: 950 * time.Millisecond, Value: 1, Ease: ui.Linear}})
+		k := float32(1)
+		if flicker {
+			k = lamp.Keyframes("on", []ui.Keyframe{{Value: 0}, {At: 950 * time.Millisecond, Value: 1, Ease: ui.Linear}})
+		}
 		lamp.Draw(func(pt *ui.Painter, r ui.Rect) {
 			n := 0
 			for row, line := range chevronDots {

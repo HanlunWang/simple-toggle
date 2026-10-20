@@ -36,7 +36,7 @@ func library() []libEntry {
 }
 
 func (e libEntry) desc() string {
-	if strs["quit"] == "Quit" {
+	if english {
 		return e.DescEn
 	}
 	return e.Desc

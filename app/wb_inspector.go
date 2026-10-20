@@ -34,7 +34,7 @@ func (w *workbench) field(c *ui.Context, key, value, placeholder string, mono bo
 		in.Placeholder(placeholder)
 	}
 	if mono {
-		in.Font("monospace").FontSize(12)
+		in.Font(monoFont).FontSize(12)
 	}
 	if fs.text != before {
 		fs.pending = true

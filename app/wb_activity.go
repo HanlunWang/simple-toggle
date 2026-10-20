@@ -157,7 +157,7 @@ func (w *workbench) activity(c *ui.Context) {
 		case 3:
 			ui.Row(c).Gap(6).AlignItems(ui.Center).MinWidth(0).Children(func() {
 				pal.badge(c, sourceLabel(r.Source), sourceTone(r.Source))
-				ui.Text(c, r.Detail).FontSize(11.5).TextColor(pal.T3).SingleLine().MinWidth(0)
+				ui.Text(c, detailLabel(r.Detail)).FontSize(11.5).TextColor(pal.T3).SingleLine().MinWidth(0)
 			})
 		case 4:
 			pal.mono(c, durText(time.Duration(r.Duration)*time.Millisecond), 11.5, pal.T3)

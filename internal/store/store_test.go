@@ -258,3 +258,16 @@ func TestV1KeysKeepOldName(t *testing.T) {
 		t.Errorf("v1 domain %q", V1Domain)
 	}
 }
+
+func TestAddChangeIgnoresOddIDs(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 手工改过 state.json：过短或不带前缀的 id 不能让编号崩溃
+	s.st.Changes = []Change{{ID: "x", Status: "rejected"}, {ID: "", Status: "rejected"}, {ID: "chg-7", Status: "rejected"}}
+	c, err := s.AddChange(Change{Kind: "create"})
+	if err != nil || c.ID != "chg-8" {
+		t.Fatalf("%+v %v", c, err)
+	}
+}

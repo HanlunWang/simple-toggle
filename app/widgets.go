@@ -63,23 +63,6 @@ func (p palette) button(c *ui.Context, key, label, iconName string, kind btnKind
 	return b
 }
 
-// sigButton 是信号色的主操作（激活场景等），带一点光。
-func (p palette) sigButton(c *ui.Context, key, label, iconName string) ui.Element {
-	b := ui.Row(c.Key(key)).Height(26).Padding(0, 11).Radius(p.rCtl()).Gap(6).AlignItems(ui.Center).Label(label).
-		Background(p.Accent).Shadow(0, 0, 12, 0, p.glowSoft())
-	if b.Hovered() {
-		b.Background(alpha(p.Accent, 0.9))
-	}
-	pressPose(b, 0.96)
-	b.Children(func() {
-		if iconName != "" {
-			icon(c, iconName, 13).TextColor(p.OnAccent)
-		}
-		ui.Text(c, label).Font(monoFont).FontSize(11.5).TextColor(p.OnAccent).SingleLine()
-	})
-	return b
-}
-
 // clicked 返回按钮是否被点击（禁用时恒为 false）。
 func clicked(b ui.Element, disabled bool) bool { return !disabled && b.Clicked() }
 

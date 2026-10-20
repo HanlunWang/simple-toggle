@@ -11,6 +11,14 @@ func init() {
 }
 
 var zhV21 = map[string]string{
+	"w_running":     "运行中",
+	"w_run":         "运行",
+	"w_on":          "开",
+	"w_off":         "关",
+	"menu_turn_off": "关闭 %s",
+	"src_menubar":   "菜单栏",
+	"unsaved_tip":   "有未保存的修改",
+
 	"eye_hide": "在面板中显示（点击隐藏）",
 	"eye_show": "已在面板中隐藏（点击显示）",
 
@@ -100,6 +108,24 @@ var zhV21 = map[string]string{
 }
 
 var enV21 = map[string]string{
+	"w_running":     "running",
+	"w_run":         "run",
+	"w_on":          "on",
+	"w_off":         "off",
+	"menu_turn_off": "Turn off %s",
+	"src_menubar":   "menu bar",
+	"unsaved_tip":   "Unsaved changes",
+
+	"n_problems_one":     "%d problem",
+	"scene_steps_one":    "%d step",
+	"ob_add_n_one":       "Add %d Switch",
+	"auto_enabled_h_one": "%d rule listening",
+	"st_n_times_one":     "%d use",
+	"st_year_total_one":  "%d use",
+	"st_of_all_one":      "%d use in all",
+	"st_rank_note_one":   "%d switch or scene · click it to focus on it",
+	"out_earlier_one":    "(%d earlier line not shown)",
+
 	"eye_hide": "Shown in the panel (click to hide)",
 	"eye_show": "Hidden from the panel (click to show)",
 
@@ -124,7 +150,7 @@ var enV21 = map[string]string{
 	"quit_toggles":           "These switches stay on, since they change system settings that quitting does not undo: %s. Their state is checked again next time.",
 	"quit_dont_ask":          "Don't ask again",
 	"list_sep":               ", ",
-	"confirm_quit":           "Explain switches that are on when quitting",
+	"confirm_quit":           "Explain what quitting does to switches that are on",
 	"confirm_quit_h":         "Before quitting with switches on, show which stop and which stay as they are",
 	"crash_title":            "SimpleToggle did not quit normally last time",
 	"crash_body_none":        "Leftover processes were cleaned up.",
@@ -186,4 +212,15 @@ var enV21 = map[string]string{
 	"mon_10":                 "Oct",
 	"mon_11":                 "Nov",
 	"mon_12":                 "Dec",
+}
+
+// detailLabel 把运行记录里 app 自己写入的来源说明（菜单栏、工作台）换成当前语言；其他说明原样显示。
+func detailLabel(d string) string {
+	switch d {
+	case "menu bar":
+		return tr("src_menubar")
+	case wbDetail:
+		return tr("workbench")
+	}
+	return d
 }

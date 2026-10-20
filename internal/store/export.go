@@ -40,9 +40,7 @@ func (s *Store) ExportState() Export {
 	for id, p := range s.st.Params {
 		x.Params[id] = maps.Clone(p)
 	}
-	for _, sc := range s.st.Scenes {
-		x.Scenes = append(x.Scenes, sc)
-	}
+	x.Scenes = append(x.Scenes, s.st.Scenes...)
 	for _, r := range s.st.Rules {
 		x.Rules = append(x.Rules, cloneRule(r))
 	}

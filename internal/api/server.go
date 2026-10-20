@@ -3,7 +3,8 @@
 //	/v1  与 v1（Swift 版）的路由、状态码、错误文案与返回结构保持一致
 //	/v2  新功能：按钮执行、运行记录、事件流（SSE）、更完整的开关信息
 //
-// 写请求必须带 Authorization: Bearer <令牌>；令牌在发现文件（权限 0600）里，
+// 除 ping 与 validate 外，所有请求（包括读：参数值里可能有密码）都必须带
+// Authorization: Bearer <令牌>；令牌在发现文件（权限 0600）里，跨重启保持不变，
 // CLI 与 MCP 自动读取。Host 头必须是回环地址，挡住浏览器发起的跨站请求与 DNS 重绑定。
 package api
 
@@ -21,6 +22,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/HanlunWang/simple-toggle/internal/contract"
@@ -39,10 +42,11 @@ const (
 	HeaderClient = "X-SimpleToggle-Client"
 )
 
-// Discovery 是发现文件的内容。
+// Discovery 是发现文件的内容。app 退出后文件保留（令牌跨重启不变），
+// 但去掉 port / pid / version：只有令牌说明 app 没在运行。
 type Discovery struct {
-	Port    int    `json:"port"`
-	PID     int    `json:"pid"`
+	Port    int    `json:"port,omitempty"`
+	PID     int    `json:"pid,omitempty"`
 	Token   string `json:"token,omitempty"`
 	Version string `json:"version,omitempty"`
 }
@@ -70,9 +74,12 @@ type Options struct {
 type Server struct {
 	eng   *engine.Engine
 	opts  Options
-	token string
+	token atomic.Pointer[string] // 处理请求时读，RegenerateToken 时换
 	srv   *http.Server
 	ln    net.Listener
+
+	discMu sync.Mutex // 串行写发现文件；保护 live
+	live   bool       // 正在监听：发现文件里写端口与 pid
 }
 
 func New(eng *engine.Engine, opts Options) *Server {
@@ -86,23 +93,24 @@ func New(eng *engine.Engine, opts Options) *Server {
 		opts.AXTrusted = darwin.AccessibilityTrusted
 	}
 	s := &Server{eng: eng, opts: opts}
-	// 沿用已有令牌，CLI 与已配置的客户端不受 app 重启影响
+	// 沿用已有令牌，CLI 与已配置的客户端不受 app 重启影响。
+	// 只检查长度：更名前（ot_ 前缀）发出的令牌照常可用
+	tok := newToken()
 	if d, err := ReadDiscovery(opts.DiscoveryPath); err == nil && len(d.Token) >= 32 {
-		s.token = d.Token
-	} else {
-		s.token = newToken()
+		tok = d.Token
 	}
+	s.token.Store(&tok)
 	return s
 }
 
 func newToken() string {
 	b := make([]byte, 24)
 	_, _ = rand.Read(b)
-	return "ot_" + hex.EncodeToString(b)
+	return "st_" + hex.EncodeToString(b)
 }
 
 // Token 返回当前令牌。
-func (s *Server) Token() string { return s.token }
+func (s *Server) Token() string { return *s.token.Load() }
 
 // Start 开始监听并写发现文件。
 func (s *Server) Start() error {
@@ -113,22 +121,27 @@ func (s *Server) Start() error {
 	s.ln = ln
 	s.srv = &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
 	go func() { _ = s.srv.Serve(ln) }()
+	s.discMu.Lock()
+	s.live = true
+	s.discMu.Unlock()
 	return s.writeDiscovery()
 }
 
-// Close 停止服务并删除发现文件。
+// Close 停止服务。发现文件只去掉端口与 pid，令牌留着，下次启动沿用。
 func (s *Server) Close() {
 	if s.srv != nil {
 		_ = s.srv.Close()
 	}
-	if s.opts.DiscoveryPath != "" {
-		_ = os.Remove(s.opts.DiscoveryPath)
-	}
+	s.discMu.Lock()
+	s.live = false
+	s.discMu.Unlock()
+	_ = s.writeDiscovery()
 }
 
-// RegenerateToken 换一个新令牌（设置里的「重新生成」）。
+// RegenerateToken 换一个新令牌（设置里的「重新生成」）并立即写进发现文件。
 func (s *Server) RegenerateToken() error {
-	s.token = newToken()
+	tok := newToken()
+	s.token.Store(&tok)
 	return s.writeDiscovery()
 }
 
@@ -136,16 +149,38 @@ func (s *Server) writeDiscovery() error {
 	if s.opts.DiscoveryPath == "" {
 		return nil
 	}
-	d := Discovery{Port: s.opts.Port, PID: os.Getpid(), Token: s.token, Version: s.opts.Version}
+	s.discMu.Lock()
+	defer s.discMu.Unlock()
+	d := Discovery{Token: s.Token()}
+	if s.live {
+		d.Port, d.PID, d.Version = s.opts.Port, os.Getpid(), s.opts.Version
+	}
 	data, _ := json.Marshal(d)
 	if err := os.MkdirAll(filepath.Dir(s.opts.DiscoveryPath), 0o755); err != nil {
 		return err
 	}
-	tmp := s.opts.DiscoveryPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	// 同目录临时文件（CreateTemp 建的是 0600）落盘后改名
+	tmp, err := os.CreateTemp(filepath.Dir(s.opts.DiscoveryPath), "."+filepath.Base(s.opts.DiscoveryPath)+".*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.opts.DiscoveryPath)
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), s.opts.DiscoveryPath)
 }
 
 // ───────── 路由 ─────────
@@ -187,7 +222,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	req := &request{w: w, r: r, parts: parts, body: body}
 	req.source, req.detail = sourceOf(r.Header.Get(HeaderClient))
 
-	if r.Method != http.MethodGet && !s.authorized(r, parts) {
+	if !s.authorized(r, parts) {
 		writeError(w, http.StatusUnauthorized, "missing or invalid token; read it from ~/.config/simple-toggle/api.json (the simpletoggle CLI and MCP server do this automatically)")
 		return
 	}
@@ -204,13 +239,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// authorized 检查令牌。纯计算的 validate 不需要令牌。
+// authorized 检查令牌。读请求同样需要：参数值、脚本、运行输出都可能含敏感信息。
+// 例外只有 GET ping（探测 app 是否在运行）与纯计算的 POST validate。
 func (s *Server) authorized(r *http.Request, parts []string) bool {
-	if r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "validate" {
-		return true
+	if len(parts) == 2 && (parts[0] == "v1" || parts[0] == "v2") {
+		switch {
+		case r.Method == http.MethodGet && parts[1] == "ping",
+			r.Method == http.MethodPost && parts[1] == "validate":
+			return true
+		}
 	}
-	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	return got != "" && subtleEqual(got, s.token)
+	got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return ok && got != "" && subtleEqual(got, s.Token())
 }
 
 func subtleEqual(a, b string) bool {
@@ -364,6 +404,10 @@ func (s *Server) switchAction(q *request, rawID, action string, v2 bool) {
 			writeError(q.w, 409, fmt.Sprintf("%q is an action switch; use POST /v2/switches/%s/run", id, id))
 			return
 		}
+		if errors.Is(err, engine.ErrShuttingDown) {
+			writeError(q.w, 503, err.Error())
+			return
+		}
 		if err != nil {
 			writeError(q.w, 500, err.Error())
 			return
@@ -390,6 +434,10 @@ func (s *Server) switchAction(q *request, rawID, action string, v2 bool) {
 			if errors.Is(err, engine.ErrNoParam) {
 				key := strings.TrimSpace(strings.TrimPrefix(err.Error(), engine.ErrNoParam.Error()))
 				writeError(q.w, 422, fmt.Sprintf("switch has no param with key %s", key))
+				return
+			}
+			if errors.Is(err, engine.ErrBadParam) {
+				writeError(q.w, 400, err.Error())
 				return
 			}
 			writeError(q.w, 500, err.Error())
@@ -459,6 +507,9 @@ func (s *Server) run(q *request, id string) {
 		return
 	case errors.Is(err, engine.ErrBusy):
 		writeError(q.w, 409, fmt.Sprintf("%q is already running", id))
+		return
+	case errors.Is(err, engine.ErrShuttingDown):
+		writeError(q.w, 503, err.Error())
 		return
 	case err != nil:
 		writeError(q.w, 500, err.Error())

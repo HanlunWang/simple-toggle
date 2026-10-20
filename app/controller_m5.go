@@ -200,14 +200,19 @@ func (c *controller) handleDeepLink(raw string) {
 		c.openSettings(l.Section)
 	case "scene":
 		_, _ = c.eng.ToggleScene(l.Target, src, detail)
-	case "run":
-		_, _ = c.eng.Run(l.Target, src, detail)
 	default:
 		v, ok := c.eng.Get(l.Target)
 		if !ok {
 			return
 		}
-		if v.Type == contract.Action {
+		if l.Verb == "run" || v.Type == contract.Action {
+			// 设了「运行前确认」的按钮不由链接直接运行：打开面板，让用户自己按
+			if v.Meta.Confirm {
+				if c.flyout == nil {
+					c.togglePanel()
+				}
+				return
+			}
 			_, _ = c.eng.Run(v.ID, src, detail)
 			return
 		}

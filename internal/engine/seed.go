@@ -30,11 +30,15 @@ func (e *Engine) Seed(examples []Example) error {
 		}
 		path := filepath.Join(e.cfg.ScriptsDir, ex.File)
 		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-			if err := writeScript(path, ex.Content); err != nil {
+			// 检查之后才出现的同名文件（用户刚建的）同样不覆盖
+			err := createScriptFile(path, ex.Content)
+			switch {
+			case err == nil:
+				if !ex.ShownByDefault {
+					_ = e.cfg.Store.SetHidden(ex.File, true)
+				}
+			case !errors.Is(err, os.ErrExist):
 				return err
-			}
-			if !ex.ShownByDefault {
-				_ = e.cfg.Store.SetHidden(ex.File, true)
 			}
 		}
 		done = append(done, ex.File)

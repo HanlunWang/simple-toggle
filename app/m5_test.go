@@ -31,7 +31,7 @@ func newFakeSettings(views []engine.View) (*settingsHost, *fakeSettings) {
 		get: func(k string) string { return f.kv[k] },
 		set: func(k, v string) { f.kv[k] = v; f.applied = append(f.applied, k+"="+v) },
 		prefs: func() Prefs {
-			p := Prefs{Theme: "system", Accent: AccentInk, Layout: "list", Density: "comfortable", Material: "glass", MenubarStyle: trayPill,
+			p := Prefs{Theme: "system", Accent: PalGraphite, Layout: "list", Density: "comfortable", Material: "glass", MenubarStyle: trayPill,
 				MenubarExtra: "countdown", ShowGroups: true, ShowScenes: true, BusyAnim: true, EditorFontSize: 13, LineNumbers: true}
 			if v := f.kv["ui.theme"]; v != "" {
 				p.Theme = v
@@ -227,7 +227,7 @@ func TestNotificationPolicy(t *testing.T) {
 
 func TestOnboarding(t *testing.T) {
 	installed := map[string]bool{"keep-awake.sh": true}
-	prefs := Prefs{Theme: "system", Accent: AccentInk, Layout: "list", MenubarStyle: trayPill}
+	prefs := Prefs{Theme: "system", Accent: PalGraphite, Layout: "list", MenubarStyle: trayPill}
 	var finished, openPanel bool
 	var installs []string
 	o := newOnboarding(&onboardingHost{

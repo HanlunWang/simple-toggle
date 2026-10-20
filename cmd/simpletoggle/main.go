@@ -138,8 +138,9 @@ func serve(args []string) error {
 	defer stop()
 	<-ctx.Done()
 	auto.Stop()
-	eng.Shutdown()
+	// 先关 API：Shutdown 收集常驻进程之后不能再有请求拉起新的
 	srv.Close()
+	eng.Shutdown()
 	return nil
 }
 

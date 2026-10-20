@@ -69,6 +69,9 @@ func (s *Server) scenes(q *request) {
 		case errors.Is(err, engine.ErrNoScene):
 			writeError(q.w, 404, fmt.Sprintf("no scene with id or name %q", p[2]))
 			return
+		case errors.Is(err, engine.ErrShuttingDown):
+			writeError(q.w, 503, err.Error())
+			return
 		case err != nil:
 			writeError(q.w, 409, err.Error())
 			return

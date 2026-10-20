@@ -1,7 +1,7 @@
-.build/
-.swiftpm/
-dist/
-
-# v2 (Go / mygo)
+# Build output
 /build/
+/dist/
 /.mygo/
+
+# macOS
+.DS_Store

@@ -46,7 +46,6 @@ var (
 		Duration: 180 * time.Millisecond,
 		Enter:    &ui.Motion{Y: 6},
 	}
-	motionColors = ui.ElementTransition{Colors: true, Duration: 160 * time.Millisecond}
 )
 
 func b2f(b bool) float32 {

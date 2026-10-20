@@ -177,6 +177,10 @@ func Start(s Spec) (*Proc, error) {
 		}
 		_ = err
 		p.mu.Unlock()
+		// 组长结束（自然退出或被终止）后，组里可能还留着后台子进程：一并结束，不留孤儿
+		if GroupAlive(p.Pid) {
+			TerminateGroup(p.Pid, KillGrace)
+		}
 		close(p.done)
 	}()
 	return p, nil
@@ -202,20 +206,38 @@ func (p *Proc) Running() bool {
 	}
 }
 
-// Stop 终止整个进程组并等待结束（最多 KillGrace 后强杀）。
+// Stop 终止整个进程组并等待结束（最多 KillGrace 后强杀）。组长已经退出时也照样
+// 向整组发信号：组里可能只剩后台子进程。
 func (p *Proc) Stop() {
 	p.mu.Lock()
 	p.exit.Stopped = true
 	p.mu.Unlock()
-	if !p.Running() {
-		return
-	}
-	_ = syscall.Kill(-p.Pid, syscall.SIGTERM)
+	_ = syscall.Kill(-p.Pid, syscall.SIGTERM) // ESRCH：组里已没有进程
 	select {
 	case <-p.done:
 	case <-time.After(KillGrace):
 		_ = syscall.Kill(-p.Pid, syscall.SIGKILL)
 		<-p.done
+	}
+}
+
+// GroupAlive 报告进程组 pgid 里是否还有进程。
+func GroupAlive(pgid int) bool {
+	return pgid > 1 && syscall.Kill(-pgid, 0) == nil
+}
+
+// TerminateGroup 向进程组发 SIGTERM，grace 内没有全部退出就 SIGKILL。不等待回收。
+func TerminateGroup(pgid int, grace time.Duration) {
+	if pgid <= 1 || syscall.Kill(-pgid, syscall.SIGTERM) != nil {
+		return // ESRCH：组里已没有进程
+	}
+	deadline := time.Now().Add(grace)
+	for GroupAlive(pgid) {
+		if time.Now().After(deadline) {
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

@@ -615,10 +615,7 @@ func padTitle(s string) string {
 
 // extraMenu 是单独图标的点击菜单：显示开关名称并提供「关闭」。
 func (c *controller) extraMenu(t *mygo.Tray, v engine.View) {
-	off := "关闭 " + v.Name
-	if strs["quit"] == "Quit" {
-		off = "Turn off " + v.Name
-	}
+	off := fmt.Sprintf(tr("menu_turn_off"), v.Name)
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		{Label: v.Name, Disabled: true},
 		mygo.Separator(),
@@ -673,8 +670,8 @@ func (c *controller) shutdown() {
 			close(c.stop)
 		}
 		c.auto.Stop()
+		c.srv.Close() // 先停 API，退出过程中不再接受新的开关请求
 		c.eng.Shutdown()
-		c.srv.Close()
 		for _, x := range c.extras {
 			x.tray.Destroy()
 		}
@@ -758,6 +755,7 @@ func (c *controller) openWorkbench(section, item string) {
 	win.OnClosed(func() {
 		if c.wbWin == win {
 			c.wbWin = nil
+			c.wb.closePopups()
 			c.eng.PanelVisible(false)
 			c.windowClosed()
 		}

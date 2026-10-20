@@ -191,14 +191,12 @@ func (p *panel) view(c *ui.Context) {
 	if !p.revealed && p.reveal != nil {
 		c.After(16 * time.Millisecond) // 等窗口调整尺寸后的那一帧
 	}
+	// 倒计时每秒刷新，运行中的按钮每 0.1 秒刷新一次计时（c.After 取最早的那个）
 	for _, v := range p.views {
-		if v.Remaining != nil {
-			c.After(time.Second)
-			break
-		}
 		if v.State == engine.Running || v.State == engine.Pending {
 			c.After(100 * time.Millisecond)
-			break
+		} else if v.Remaining != nil {
+			c.After(time.Second)
 		}
 	}
 	for id, t := range p.armed {
@@ -222,7 +220,7 @@ func (p *panel) header(c *ui.Context) {
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Padding(12, 12, 8, 16).Children(func() {
 		// Logo：点阵的 ›（打开时逐点闪亮）+ 等宽小写 simpletoggle
 		n := p.onCount()
-		pal.brand(c, 12.5)
+		pal.brand(c, 12.5, false)
 		if n > 0 {
 			ui.Text(c.Key("on-count"), fmt.Sprintf(tr("on_count"), n)).Font(monoFont).FontSize(11).TextColor(pal.T3).
 				ContentTransition(ui.ContentTransition{Numeric: true}).
@@ -251,7 +249,7 @@ func (p *panel) searchField(c *ui.Context) {
 
 func (p *panel) axBanner(c *ui.Context) {
 	pal := p.pal
-	ui.Row(c.Key("ax-banner")).FillWidth().Margin(0, 12, 8).Padding(8, 10).Radius(10).Gap(8).AlignItems(ui.Center).
+	ui.Row(c.Key("ax-banner")).FillWidth().Margin(0, 12, 8).Padding(8, 10).Radius(pal.rCard()).Gap(8).AlignItems(ui.Center).
 		Background(alpha(pal.Amber, 0.12)).Transition(motionReveal).Children(func() {
 		icon(c, "keyboard", 14).TextColor(pal.Amber)
 		ui.Text(c, tr("ax_title")).FontSize(11.5).TextColor(pal.T1).Grow(1).Wrap()
@@ -371,7 +369,7 @@ func (p *panel) empty(c *ui.Context) {
 			ui.Textf(c, tr("no_match"), p.query).FontSize(12).TextColor(pal.T3)
 			return
 		}
-		ui.Text(c, ">_").Font("monospace").FontSize(19).TextColor(pal.T3)
+		ui.Text(c, ">_").Font(monoFont).FontSize(19).TextColor(pal.T3)
 		ui.Text(c, tr("empty")).FontSize(12.5).TextColor(pal.T1)
 		ui.Text(c, tr("empty_hint")).FontSize(11.5).TextColor(pal.T3).Wrap()
 		if ui.Button(c.Key("empty-open"), tr("open_scripts")).Clicked() && p.openScripts != nil {
@@ -611,7 +609,7 @@ func (p *panel) row(c *ui.Context, v engine.View) {
 				}
 			})
 			if hasParams {
-				chev := ui.Row(c.Key("chev-"+v.ID)).Size(20, 20).Radius(6).AlignItems(ui.Center).Justify(ui.Center).Label("params")
+				chev := ui.Row(c.Key("chev-"+v.ID)).Size(20, 20).Radius(6).AlignItems(ui.Center).Justify(ui.Center).Label(tr("sec_params"))
 				chev.Background(chev.AnimateColor("bg", pick(chev.Hovered(), pal.L2, ui.Transparent), animHover))
 				turn := chev.AnimateTo("turn", 90*b2f(open), ui.Animation{Spring: ui.SpringOptions{Duration: 300 * time.Millisecond, Bounce: 0.15}})
 				chev.Children(func() { icon(c, "chevron-right", 13).TextColor(pal.T3).Rotate(turn) })
@@ -760,7 +758,7 @@ func (p *panel) paramsEditor(c *ui.Context, v engine.View) ui.Element {
 				ui.Row(c).FillWidth().Children(func() {
 					ui.Text(c, pv.Label).FontSize(11).TextColor(pal.T3)
 					ui.Spacer(c)
-					ui.Text(c, contract.EnvName(pv.Key)).Font("monospace").FontSize(10).TextColor(pal.T3)
+					ui.Text(c, contract.EnvName(pv.Key)).Font(monoFont).FontSize(10).TextColor(pal.T3)
 				})
 				switch pv.Type {
 				case contract.ParamSelect:
@@ -822,7 +820,7 @@ func (p *panel) numberParam(c *ui.Context, v engine.View, pv engine.ParamView) {
 		if !editing {
 			text = pv.Value
 		}
-		in := ui.TextInput(c.Key("num"), &text).Width(72).Font("monospace").FontSize(11.5).Label(pv.Label)
+		in := ui.TextInput(c.Key("num"), &text).Width(72).Font(monoFont).FontSize(11.5).Label(pv.Label)
 		if text != pv.Value || editing {
 			p.edits[key] = text
 		}
@@ -857,7 +855,7 @@ func (p *panel) textParam(c *ui.Context, v engine.View, pv engine.ParamView) {
 			}
 		}
 	})
-	in := ui.TextInput(c.Key("text"), &text).FillWidth().Font("monospace").FontSize(12).Label(pv.Label)
+	in := ui.TextInput(c.Key("text"), &text).FillWidth().Font(monoFont).FontSize(12).Label(pv.Label)
 	if pv.Hint != "" {
 		in.Placeholder(pv.Hint)
 	}
@@ -929,11 +927,11 @@ func (p *panel) tile(c *ui.Context, v engine.View) {
 			if s == "" {
 				switch {
 				case v.Type == contract.Action:
-					s = "run"
+					s = tr("w_run")
 				case on:
-					s = "on"
+					s = tr("w_on")
 				default:
-					s = "off"
+					s = tr("w_off")
 				}
 				col = pal.T3
 			}
@@ -956,7 +954,7 @@ func (p *panel) tile(c *ui.Context, v engine.View) {
 func (p *panel) footer(c *ui.Context) {
 	pal := p.pal
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(2).Padding(6, 8).Children(func() {
-		wb := ui.Row(c.Key("open-workbench")).Height(26).Padding(0, 8).Radius(7).Gap(6).AlignItems(ui.Center).Label(tr("workbench"))
+		wb := ui.Row(c.Key("open-workbench")).Height(26).Padding(0, 8).Radius(pal.rCtl()).Gap(6).AlignItems(ui.Center).Label(tr("workbench"))
 		wb.Background(wb.AnimateColor("bg", pick(wb.Hovered(), pal.L2, ui.Transparent), animHover))
 		pressPose(wb, 0.96)
 		col := wb.AnimateColor("fg", pick(wb.Hovered(), pal.T1, pal.T2), animHover)

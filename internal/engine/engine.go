@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +54,9 @@ var (
 	ErrNotAction = errors.New("switch is not an action")
 	ErrBusy      = errors.New("switch is already running")
 	ErrNoParam   = errors.New("switch has no such param")
+	ErrBadParam  = errors.New("invalid param value")
+	// ErrShuttingDown：引擎正在退出，不再开始新的操作
+	ErrShuttingDown = errors.New("SimpleToggle is shutting down")
 )
 
 // LintError 表示脚本没有通过契约检查。
@@ -105,6 +110,7 @@ type Engine struct {
 	switches   map[string]*Switch
 	rts        map[string]*rt
 	generation uint64
+	closing    bool // Shutdown 已开始：不再开始新的操作，新拉起的常驻进程立即结束
 	polling    bool
 	visible    int
 	dirSig     string
@@ -124,6 +130,8 @@ type Engine struct {
 
 	guardMu sync.Mutex
 	guard   *exec.Cmd
+
+	ledgerMu sync.Mutex // writeLedger 的快照与写入整体串行
 }
 
 func New(cfg Config) *Engine {
@@ -176,6 +184,10 @@ func (e *Engine) Shutdown() {
 	default:
 		close(e.stopCh)
 	}
+	// 先标记 closing 再收集常驻进程：之后 spawn 出来的进程由 spawn 自己结束，不会漏掉
+	e.mu.Lock()
+	e.closing = true
+	e.mu.Unlock()
 	e.wg.Wait()
 	e.waitOps(5 * time.Second)
 	e.mu.Lock()
@@ -192,7 +204,9 @@ func (e *Engine) Shutdown() {
 		go func(p *runner.Proc) { defer wg.Done(); p.Stop() }(p)
 	}
 	wg.Wait()
+	e.ledgerMu.Lock() // 等进行中的 writeLedger 写完再删
 	_ = os.Remove(e.cfg.LedgerPath)
+	e.ledgerMu.Unlock()
 	e.stopGuard()
 }
 
@@ -485,8 +499,18 @@ func (e *Engine) record(sw *Switch, action string, src Source, detail string, re
 
 // ───────── 开 / 关 ─────────
 
+// shuttingDown 报告 Shutdown 是否已开始。
+func (e *Engine) shuttingDown() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.closing
+}
+
 // SetSwitch 打开或关闭开关，立即返回；用 Wait 等待结果。
 func (e *Engine) SetSwitch(id string, on bool, src Source, detail string) (<-chan struct{}, error) {
+	if e.shuttingDown() {
+		return nil, ErrShuttingDown
+	}
 	sw, r, err := e.lookup(id)
 	if err != nil {
 		return nil, err
@@ -546,6 +570,9 @@ func (e *Engine) spawn(sw *Switch, r *rt, src Source, detail string) {
 	if running {
 		return
 	}
+	if e.shuttingDown() {
+		return
+	}
 	p, err := runner.Start(e.spec(sw, src, "run"))
 	if err != nil {
 		e.record(sw, "start", src, detail, runner.Result{ExitCode: 127, Err: err, Output: err.Error()})
@@ -553,6 +580,12 @@ func (e *Engine) spawn(sw *Switch, r *rt, src Source, detail string) {
 		return
 	}
 	e.mu.Lock()
+	if e.closing {
+		// Shutdown 已经收集过常驻进程：这个不会被它结束，自己结束
+		e.mu.Unlock()
+		p.Stop()
+		return
+	}
 	r.daemon = p
 	e.mu.Unlock()
 	e.writeLedger()
@@ -614,6 +647,9 @@ func (e *Engine) stopDaemon(sw *Switch, r *rt, src Source, detail string) {
 
 // Run 执行按钮型开关，立即返回；结果在完成后通过事件与运行记录给出。
 func (e *Engine) Run(id string, src Source, detail string) (<-chan store.Run, error) {
+	if e.shuttingDown() {
+		return nil, ErrShuttingDown
+	}
 	sw, r, err := e.lookup(id)
 	if err != nil {
 		return nil, err
@@ -665,9 +701,13 @@ func (e *Engine) SetParams(id string, values map[string]string, src Source) erro
 	if err != nil {
 		return err
 	}
-	for k := range values {
-		if _, ok := sw.Header.Param(k); !ok {
+	for k, v := range values {
+		p, ok := sw.Header.Param(k)
+		if !ok {
 			return fmt.Errorf("%w %q", ErrNoParam, k)
+		}
+		if err := checkParam(p, v); err != nil {
+			return err
 		}
 	}
 	changed := false
@@ -684,6 +724,42 @@ func (e *Engine) SetParams(id string, values map[string]string, src Source) erro
 		e.restartIfOn(sw, r, src, "params changed")
 	}
 	return nil
+}
+
+// checkParam 校验参数值：select 必须是选项之一，number 必须是数字且在 min / max 之间。
+// 错误包装 ErrBadParam，文案可以直接给调用方看。
+func checkParam(p contract.Param, v string) error {
+	switch p.Type {
+	case contract.ParamSelect:
+		var values []string
+		for _, o := range p.Options {
+			if o.Value == v {
+				return nil
+			}
+			values = append(values, strconv.Quote(o.Value))
+		}
+		return fmt.Errorf("%w: %s must be one of %s, got %q", ErrBadParam, p.Key, strings.Join(values, ", "), v)
+	case contract.ParamNumber:
+		n, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return fmt.Errorf("%w: %s must be a number, got %q", ErrBadParam, p.Key, v)
+		}
+		if (p.Min != nil && n < float64(*p.Min)) || (p.Max != nil && n > float64(*p.Max)) {
+			return fmt.Errorf("%w: %s must be %s, got %s", ErrBadParam, p.Key, rangeText(p.Min, p.Max), v)
+		}
+	}
+	return nil
+}
+
+func rangeText(lo, hi *int) string {
+	switch {
+	case lo != nil && hi != nil:
+		return fmt.Sprintf("between %d and %d", *lo, *hi)
+	case lo != nil:
+		return fmt.Sprintf("at least %d", *lo)
+	default:
+		return fmt.Sprintf("at most %d", *hi)
+	}
 }
 
 func (e *Engine) restartIfOn(sw *Switch, r *rt, src Source, detail string) {
@@ -755,17 +831,19 @@ func (e *Engine) CreateScript(content string) (string, []contract.Issue, error) 
 	file := contract.Slug(name)
 	path := filepath.Join(e.cfg.ScriptsDir, file)
 	base, ext := strings.TrimSuffix(file, filepath.Ext(file)), filepath.Ext(file)
-	for n := 2; ; n++ {
-		if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
-			break
-		}
-		path = filepath.Join(e.cfg.ScriptsDir, fmt.Sprintf("%s-%d%s", base, n, ext))
-	}
 	if err := os.MkdirAll(e.cfg.ScriptsDir, 0o755); err != nil {
 		return "", issues, err
 	}
-	if err := writeScript(path, content); err != nil {
-		return "", issues, err
+	// 重名（包括并发出现的同名文件）就换下一个序号，不覆盖
+	for n := 2; ; n++ {
+		err := createScriptFile(path, content)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", issues, err
+		}
+		path = filepath.Join(e.cfg.ScriptsDir, fmt.Sprintf("%s-%d%s", base, n, ext))
 	}
 	e.reload()
 	e.kick()
@@ -794,24 +872,78 @@ func (e *Engine) DeleteScript(id string) error {
 	return nil
 }
 
+// writeScript 原子覆盖脚本。path 是软链接时写到它指向的文件（链接本身保留）；
+// 覆盖时保留原有权限，新文件为 0755。
 func writeScript(path, content string) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	mode := os.FileMode(0o755)
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		path = target
+		if fi, err := os.Stat(target); err == nil {
+			mode = fi.Mode().Perm()
+		}
+	}
+	tmp, err := tempScript(path, content, mode)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
+	defer os.Remove(tmp)
+	return os.Rename(tmp, path)
+}
+
+// createScriptFile 新建脚本，绝不覆盖：path 已存在（包括检查之后才出现的）时返回
+// 包装了 os.ErrExist 的错误。用硬链接发布临时文件，读者看不到写了一半的内容。
+func createScriptFile(path, content string) error {
+	tmp, err := tempScript(path, content, 0o755)
+	if err != nil {
 		return err
 	}
-	if err := tmp.Chmod(0o755); err != nil {
-		tmp.Close()
+	defer os.Remove(tmp)
+	err = os.Link(tmp, path)
+	if err == nil || errors.Is(err, os.ErrExist) {
 		return err
+	}
+	// 文件系统不支持硬链接：退回 O_EXCL 直接写
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// tempScript 在 path 所在目录写好一个已落盘的临时文件（点开头，扫描时被忽略），返回其路径。
+func tempScript(path, content string, mode os.FileMode) (string, error) {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		return "", err
+	}
+	name := tmp.Name()
+	fail := func(err error) (string, error) {
+		tmp.Close()
+		os.Remove(name)
+		return "", err
+	}
+	if _, err := tmp.WriteString(content); err != nil {
+		return fail(err)
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		return fail(err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fail(err)
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		os.Remove(name)
+		return "", err
 	}
-	return os.Rename(tmp.Name(), path)
+	return name, nil
 }
 
 // ───────── 恢复 ─────────

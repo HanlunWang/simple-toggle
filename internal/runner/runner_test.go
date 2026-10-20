@@ -94,6 +94,57 @@ func TestDaemonStopAndNaturalExit(t *testing.T) {
 	}
 }
 
+func readPid(t *testing.T, path string) int {
+	t.Helper()
+	var pid int
+	for i := 0; i < 100 && pid == 0; i++ {
+		data, _ := os.ReadFile(path)
+		fmtSscan(strings.TrimSpace(string(data)), &pid)
+		if pid == 0 {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if pid == 0 {
+		t.Fatal("no pid written")
+	}
+	return pid
+}
+
+func TestDaemonExitKillsBackgroundChildren(t *testing.T) {
+	// 常驻进程自然结束时留下的后台子进程要一并结束
+	marker := filepath.Join(t.TempDir(), "child.pid")
+	p, err := Start(Spec{Path: script(t, "#!/bin/sh\nsleep 30 &\necho $! > "+marker+"\nexit 0\n", 0o755)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-p.Done()
+	pid := readPid(t, marker)
+	time.Sleep(100 * time.Millisecond)
+	if syscall.Kill(pid, 0) == nil {
+		syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatal("background child survived the daemon's exit")
+	}
+	if e := p.Exit(); e.Code != 0 || e.Signaled {
+		t.Fatalf("exit: %+v", e)
+	}
+	p.Stop() // 组长与子进程都已结束：不报错、不阻塞
+}
+
+func TestStopKillsChildrenThatIgnoreTerm(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "child.pid")
+	p, err := Start(Spec{Path: script(t, "#!/bin/sh\nsh -c 'trap \"\" TERM; while :; do sleep 0.1; done' &\necho $! > "+marker+"\nwhile :; do sleep 0.1; done\n", 0o755)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := readPid(t, marker)
+	p.Stop()
+	time.Sleep(100 * time.Millisecond)
+	if syscall.Kill(pid, 0) == nil {
+		syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatal("child ignoring SIGTERM survived Stop")
+	}
+}
+
 func TestRingKeepsTail(t *testing.T) {
 	var r Ring
 	r.Write([]byte(strings.Repeat("a", MaxOutput)))

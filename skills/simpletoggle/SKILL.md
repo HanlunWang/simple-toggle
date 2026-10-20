@@ -114,4 +114,4 @@ Scenes are one-click groups of steps (`on` / `off` / `run`), created by the user
 
 ## HTTP API (advanced)
 
-The app serves a local control API on `127.0.0.1:43737`. Writes need the token from `~/.config/simple-toggle/api.json` (the CLI and MCP read it automatically). `/v1` is unchanged from OpenToggle 0.5 (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …); 2.0 adds `/v2` (`POST /v2/switches/{id}/run`, `GET /v2/runs`, `GET /v2/events` (SSE), `/v2/scenes`, `/v2/automations`, `/v2/changes`). Use the API directly only when the CLI is unavailable.
+The app serves a local control API on `127.0.0.1:43737`. Every request except `ping` and `validate` needs the token from `~/.config/simple-toggle/api.json` (the CLI and MCP read it automatically). `/v1` is unchanged from OpenToggle 0.5 (`GET /v1/switches`, `POST /v1/switches/{id}/on`, `PUT /v1/switches/{id}/script`, `POST /v1/scripts`, `POST /v1/validate`, …); 2.0 adds `/v2` (`POST /v2/switches/{id}/run`, `GET /v2/runs`, `GET /v2/events` (SSE), `/v2/scenes`, `/v2/automations`, `/v2/changes`). Use the API directly only when the CLI is unavailable.

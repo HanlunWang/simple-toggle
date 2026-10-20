@@ -30,7 +30,7 @@ func daysText(days []int) string {
 		names = append(names, tr("dl"+strconv.Itoa(x)))
 	}
 	sep := "、"
-	if strs["quit"] == "Quit" {
+	if english {
 		sep = ", "
 	}
 	return strings.Join(names, sep)
@@ -66,11 +66,11 @@ func triggerText(t store.Trigger) string {
 		if label == "" {
 			label = tr("some_app")
 		}
-		return fmt.Sprintf(tr("desc_app"), label, tr("ev_"+t.Event))
+		return fmt.Sprintf(tr("desc_app"), label, evWord(t.Event))
 	case automation.KindDisplay:
-		return fmt.Sprintf(tr("desc_display"), tr("ev_"+t.Event))
+		return fmt.Sprintf(tr("desc_display"), evWord(t.Event))
 	case automation.KindWake:
-		return fmt.Sprintf(tr("desc_wake"), tr("ev_"+t.Event))
+		return fmt.Sprintf(tr("desc_wake"), evWord(t.Event))
 	case automation.KindFile:
 		return fmt.Sprintf(tr("desc_file"), filepath.Base(t.Value))
 	case automation.KindShortcut:
@@ -87,4 +87,12 @@ func actionText(a store.RuleAction, name func(verb, id string) string) string {
 // ruleText 是完整说明：「工作日 18:30 → 激活场景 下班」。
 func ruleText(r store.Rule, name func(verb, id string) string) string {
 	return triggerText(r.Trigger) + " → " + actionText(r.Action, name)
+}
+
+// evWord 是拼进句子里的事件词：英文里小写（「Safari launches」「Display connected」），中文原样。
+func evWord(event string) string {
+	if english {
+		return strings.ToLower(tr("ev_" + event))
+	}
+	return tr("ev_" + event)
 }

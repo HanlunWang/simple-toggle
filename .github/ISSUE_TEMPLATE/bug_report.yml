@@ -1,0 +1,30 @@
+name: Bug report
+description: Something doesn't work as expected / 功能不正常
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? / 发生了什么？
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`simpletoggle doctor` output"
+      description: Run it in Terminal and paste the result. / 在终端运行并粘贴输出。
+      render: text
+  - type: textarea
+    id: script
+    attributes:
+      label: Script header (if a switch is involved) / 相关脚本的契约头
+      description: The `# <switch.*>` lines at the top of the script. Remove anything private.
+      render: bash
+  - type: input
+    id: versions
+    attributes:
+      label: SimpleToggle and macOS versions / 版本
+      placeholder: SimpleToggle 2.0.0, macOS 15.1
+    validations:
+      required: true

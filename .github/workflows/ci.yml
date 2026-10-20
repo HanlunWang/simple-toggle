@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, v2]
+    branches: [main]
   pull_request:
 
 jobs:
   go:
-    # 引擎、API、CLI、MCP 与界面的单元测试和端到端验收
+    # Unit and end-to-end tests for the engine, API, CLI, MCP server and UI
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Format
-        run: test -z "$(gofmt -l app cmd internal spikes)" || { gofmt -l app cmd internal spikes; exit 1; }
+        run: test -z "$(gofmt -l app cmd internal)" || { gofmt -l app cmd internal; exit 1; }
 
       - name: Vet
         run: go vet ./...

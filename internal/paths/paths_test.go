@@ -28,6 +28,14 @@ func TestCopyScripts(t *testing.T) {
 	if n, _ := copyScripts(from, to); n != 0 {
 		t.Fatal("copied into a non-empty folder")
 	}
+	// 用户删光了脚本：目录还在，旧脚本不能复活
+	entries, _ := os.ReadDir(to)
+	for _, e := range entries {
+		os.Remove(filepath.Join(to, e.Name()))
+	}
+	if n, _ := copyScripts(from, to); n != 0 {
+		t.Fatal("legacy scripts came back after the user deleted them all")
+	}
 	if n, err := copyScripts(filepath.Join(root, "missing"), filepath.Join(root, "x")); n != 0 || err != nil {
 		t.Fatal("missing legacy folder")
 	}

@@ -23,7 +23,6 @@ var zh = map[string]string{
 	"turning_off":    "正在关闭…",
 	"daemon_running": "运行中",
 	"remaining":      "剩 %s",
-	"unknown":        "状态未知",
 	"error":          "出错",
 	"ax_title":       "按键类开关需要「辅助功能」权限",
 	"ax_button":      "去授权",
@@ -56,9 +55,8 @@ var en = map[string]string{
 	"turning_off":    "Turning off…",
 	"daemon_running": "Running",
 	"remaining":      "%s left",
-	"unknown":        "Unknown",
 	"error":          "Error",
-	"ax_title":       "Key switches need Accessibility permission",
+	"ax_title":       "Switches that press keys need Accessibility permission",
 	"ax_button":      "Grant",
 	"other_group":    "Other",
 	"just_now":       "just now",
@@ -71,13 +69,26 @@ var en = map[string]string{
 
 var strs = zh
 
+// english 报告当前界面语言是否是英文（拼接列表、单复数等少数地方需要）。
+var english bool
+
 // setLanguage 按语言代码（如 zh-Hans、en）选择文案。
 func setLanguage(lang string) {
 	if strings.HasPrefix(lang, "zh") {
-		strs = zh
+		strs, english = zh, false
 	} else if lang != "" {
-		strs = en
+		strs, english = en, true
 	}
+}
+
+// trn 是带数量的文案：英文里数量为 1 时用 key_one（如「1 problem」），其余与 tr 相同。
+func trn(key string, n int) string {
+	if n == 1 {
+		if s, ok := strs[key+"_one"]; ok {
+			return s
+		}
+	}
+	return tr(key)
 }
 
 func tr(key string) string {

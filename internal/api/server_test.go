@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -78,13 +79,29 @@ func TestAuthAndHost(t *testing.T) {
 	if code, _ := e.do("POST", "/v1/switches/lamp/on", "", false, ""); code != 401 {
 		t.Fatalf("write without token: %d", code)
 	}
-	if code, _ := e.do("GET", "/v1/switches", "", false, ""); code != 200 {
-		t.Fatalf("read without token: %d", code)
+	// 读同样需要令牌：参数值、脚本、运行输出可能含敏感信息
+	for _, path := range []string{"/v1/switches", "/v1/switches/lamp", "/v1/switches/lamp/script", "/v2/switches", "/v2/runs", "/v2/events", "/v2/scenes", "/v2/automations", "/v2/changes", "/v1/nope"} {
+		if code, _ := e.do("GET", path, "", false, ""); code != 401 {
+			t.Fatalf("GET %s without token: %d", path, code)
+		}
+	}
+	req, _ := http.NewRequest("GET", e.ts.URL+"/v1/switches", nil)
+	req.Header.Set("Authorization", "Bearer wrong")
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 401 {
+		t.Fatalf("wrong token: %d", resp.StatusCode)
+	}
+	if code, _ := e.do("GET", "/v1/switches", "", true, ""); code != 200 {
+		t.Fatalf("read with token: %d", code)
+	}
+	for _, path := range []string{"/v1/ping", "/v2/ping"} {
+		if code, _ := e.do("GET", path, "", false, ""); code != 200 {
+			t.Fatalf("%s should not need a token: %d", path, code)
+		}
 	}
 	if code, _ := e.do("POST", "/v1/validate", "#!/bin/sh\n# <switch.name> A\necho status\n", false, ""); code != 200 {
 		t.Fatalf("validate should not need a token: %d", code)
 	}
-	req, _ := http.NewRequest("GET", e.ts.URL+"/v1/switches", nil)
+	req, _ = http.NewRequest("GET", e.ts.URL+"/v1/switches", nil)
 	req.Host = "evil.example:43737"
 	resp, _ := http.DefaultClient.Do(req)
 	if resp.StatusCode != 403 {
@@ -94,7 +111,7 @@ func TestAuthAndHost(t *testing.T) {
 
 func TestV1Compat(t *testing.T) {
 	e := newEnv(t)
-	code, body := e.do("GET", "/v1/switches", "", false, "")
+	code, body := e.do("GET", "/v1/switches", "", true, "")
 	var list []map[string]any
 	if code != 200 || json.Unmarshal([]byte(body), &list) != nil || len(list) != 2 {
 		t.Fatalf("%d %s", code, body)
@@ -118,16 +135,16 @@ func TestV1Compat(t *testing.T) {
 	if code, body := e.do("PUT", "/v1/switches/lamp/params", `{"nope":1}`, true, ""); code != 422 || !strings.Contains(body, `switch has no param with key \"nope\"`) {
 		t.Fatalf("unknown param: %d %s", code, body)
 	}
-	if code, body := e.do("GET", "/v1/switches/ghost", "", false, ""); code != 404 || !strings.Contains(body, `no switch with id \"ghost\"`) {
+	if code, body := e.do("GET", "/v1/switches/ghost", "", true, ""); code != 404 || !strings.Contains(body, `no switch with id \"ghost\"`) {
 		t.Fatalf("404: %d %s", code, body)
 	}
-	if code, body := e.do("GET", "/v1/switches/"+url.PathEscape("摸鱼.sh"), "", false, ""); code != 200 || !strings.Contains(body, `"type": "action"`) {
+	if code, body := e.do("GET", "/v1/switches/"+url.PathEscape("摸鱼.sh"), "", true, ""); code != 200 || !strings.Contains(body, `"type": "action"`) {
 		t.Fatalf("CJK id: %d %s", code, body)
 	}
 	if code, body := e.do("POST", "/v1/switches/lamp/disable", "", true, ""); code != 200 || !strings.Contains(body, `"enabled": false`) {
 		t.Fatalf("disable: %d %s", code, body)
 	}
-	if code, body := e.do("GET", "/v1/switches/lamp/script", "", false, ""); code != 200 || !strings.HasPrefix(body, "#!/bin/sh") {
+	if code, body := e.do("GET", "/v1/switches/lamp/script", "", true, ""); code != 200 || !strings.HasPrefix(body, "#!/bin/sh") {
 		t.Fatalf("script: %d", code)
 	}
 	if code, body := e.do("PUT", "/v1/switches/lamp/script", "#!/bin/sh\necho no name\n", true, ""); code != 422 || !strings.Contains(body, `"valid": false`) {
@@ -155,7 +172,7 @@ func TestV2RunAndRuns(t *testing.T) {
 		t.Fatalf("run: %d %s", code, body)
 	}
 	e.do("POST", "/v1/switches/lamp/on", "", true, "cli/agent:Codex")
-	code, body = e.do("GET", "/v2/runs?limit=5", "", false, "")
+	code, body = e.do("GET", "/v2/runs?limit=5", "", true, "")
 	var runs []map[string]any
 	if code != 200 || json.Unmarshal([]byte(body), &runs) != nil || len(runs) < 2 {
 		t.Fatalf("runs: %d %s", code, body)
@@ -163,7 +180,7 @@ func TestV2RunAndRuns(t *testing.T) {
 	if runs[0]["source"] != "ai" || runs[0]["detail"] != "Codex · CLI" {
 		t.Fatalf("agent CLI source: %v", runs[0])
 	}
-	code, body = e.do("GET", "/v2/switches/lamp", "", false, "")
+	code, body = e.do("GET", "/v2/switches/lamp", "", true, "")
 	if code != 200 || !strings.Contains(body, `"kind": "lucide"`) || !strings.Contains(body, `"value": "moon"`) || !strings.Contains(body, `"lastRun"`) {
 		t.Fatalf("v2 switch: %s", body)
 	}
@@ -185,7 +202,9 @@ func TestPress(t *testing.T) {
 
 func TestEventsStream(t *testing.T) {
 	e := newEnv(t)
-	resp, err := http.Get(e.ts.URL + "/v2/events")
+	req, _ := http.NewRequest("GET", e.ts.URL+"/v2/events", nil)
+	req.Header.Set("Authorization", "Bearer "+e.s.Token())
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,13 +244,98 @@ func TestDiscoveryFile(t *testing.T) {
 		t.Fatalf("discovery file mode %v", fi.Mode().Perm())
 	}
 	d, _ := ReadDiscovery(e.disc)
-	if d.Token != e.s.Token() {
-		t.Fatal("token not written")
+	if d.Token != e.s.Token() || !strings.HasPrefix(d.Token, "st_") {
+		t.Fatalf("token not written: %q", d.Token)
 	}
 	// 重启后沿用同一令牌
 	again := New(nil, Options{DiscoveryPath: e.disc})
 	if again.Token() != e.s.Token() {
 		t.Fatal("token not reused")
+	}
+	// 更名前（ot_ 前缀）的令牌照常沿用
+	old := "ot_" + strings.Repeat("ab", 24)
+	os.WriteFile(e.disc, []byte(`{"port":1,"pid":1,"token":"`+old+`"}`), 0o600)
+	if New(nil, Options{DiscoveryPath: e.disc}).Token() != old {
+		t.Fatal("legacy token not reused")
+	}
+}
+
+func freePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func TestTokenSurvivesRestart(t *testing.T) {
+	disc := filepath.Join(t.TempDir(), "api.json")
+	s := New(nil, Options{Port: freePort(t), DiscoveryPath: disc, Version: "2.0.0-test"})
+	if err := s.Start(); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := ReadDiscovery(disc)
+	if d.Port != s.Port() || d.PID != os.Getpid() || d.Token != s.Token() {
+		t.Fatalf("running discovery: %+v", d)
+	}
+	tok := s.Token()
+	s.Close()
+	// 退出后只留令牌：客户端据此知道 app 没在运行，下次启动沿用令牌
+	d, err := ReadDiscovery(disc)
+	if err != nil || d.Port != 0 || d.PID != 0 || d.Token != tok {
+		t.Fatalf("after close: %+v %v", d, err)
+	}
+	s2 := New(nil, Options{Port: freePort(t), DiscoveryPath: disc})
+	if s2.Token() != tok {
+		t.Fatal("token changed across restart")
+	}
+	if err := s2.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer s2.Close()
+	if err := s2.RegenerateToken(); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = ReadDiscovery(disc)
+	if s2.Token() == tok || d.Token != s2.Token() || d.Port != s2.Port() {
+		t.Fatalf("regenerate: %+v", d)
+	}
+	if fi, _ := os.Stat(disc); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", fi.Mode().Perm())
+	}
+}
+
+func TestRegenerateTokenWhileServing(t *testing.T) {
+	// 令牌在处理请求的同时被换掉：-race 下不能有数据竞争，旧令牌随即失效
+	e := newEnv(t)
+	old := e.s.Token()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 20; i++ {
+			e.s.RegenerateToken()
+		}
+	}()
+	for i := 0; i < 20; i++ {
+		e.do("GET", "/v1/switches", "", true, "")
+	}
+	<-done
+	req, _ := http.NewRequest("GET", e.ts.URL+"/v1/switches", nil)
+	req.Header.Set("Authorization", "Bearer "+old)
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 401 {
+		t.Fatalf("old token still accepted: %d", resp.StatusCode)
+	}
+}
+
+func TestBadParamValues(t *testing.T) {
+	e := newEnv(t)
+	if code, body := e.do("PUT", "/v1/switches/lamp/params", `{"mode":"zzz"}`, true, ""); code != 400 || !strings.Contains(body, "must be one of") {
+		t.Fatalf("bad select: %d %s", code, body)
+	}
+	if code, _ := e.do("PUT", "/v1/switches/lamp/params", `{"mode":"b"}`, true, ""); code != 200 {
+		t.Fatalf("good select: %d", code)
 	}
 }
 
@@ -239,7 +343,7 @@ func TestScenesAPI(t *testing.T) {
 	e := newEnv(t)
 	st := e.s.opts.Store
 	st.PutScene(store.Scene{ID: "work", Name: "Work", Restore: true, Steps: []store.SceneStep{{Switch: "lamp.sh", Action: "on"}, {Switch: "摸鱼.sh", Action: "run"}}})
-	code, body := e.do("GET", "/v2/scenes", "", false, "")
+	code, body := e.do("GET", "/v2/scenes", "", true, "")
 	if code != 200 || !strings.Contains(body, `"id": "work"`) || !strings.Contains(body, `"active": false`) {
 		t.Fatalf("list: %d %s", code, body)
 	}
@@ -258,7 +362,7 @@ func TestScenesAPI(t *testing.T) {
 		t.Fatalf("missing scene: %d", code)
 	}
 	st.PutRule(store.Rule{ID: "r1", Enabled: true, Trigger: store.Trigger{Kind: "wake", Event: "wake"}, Action: store.RuleAction{Verb: "on", Target: "lamp.sh"}})
-	if code, body := e.do("GET", "/v2/automations", "", false, ""); code != 200 || !strings.Contains(body, `"kind": "wake"`) {
+	if code, body := e.do("GET", "/v2/automations", "", true, ""); code != 200 || !strings.Contains(body, `"kind": "wake"`) {
 		t.Fatalf("automations: %d %s", code, body)
 	}
 }
@@ -268,7 +372,7 @@ func TestAIPermissionsAndApproval(t *testing.T) {
 	st := e.s.opts.Store
 	agent := "mcp/claude-code"
 	// 默认：AI 可以读、开关、写（需确认），不能删
-	if code, _ := e.do("GET", "/v1/switches", "", false, agent); code != 200 {
+	if code, _ := e.do("GET", "/v1/switches", "", true, agent); code != 200 {
 		t.Fatalf("read: %d", code)
 	}
 	if code, body := e.do("DELETE", "/v1/switches/lamp", "", true, agent); code != 403 || !strings.Contains(body, "delete scripts") {
@@ -279,7 +383,7 @@ func TestAIPermissionsAndApproval(t *testing.T) {
 	if code != 202 || !strings.Contains(body, `"changeId": "chg-1"`) {
 		t.Fatalf("write should wait: %d %s", code, body)
 	}
-	if code, body := e.do("GET", "/v2/changes/chg-1", "", false, agent); code != 200 || !strings.Contains(body, `"status": "pending"`) {
+	if code, body := e.do("GET", "/v2/changes/chg-1", "", true, agent); code != 200 || !strings.Contains(body, `"status": "pending"`) {
 		t.Fatalf("status: %d %s", code, body)
 	}
 	if code, _ := e.do("POST", "/v2/changes/chg-1/approve", "", true, agent); code != 404 {
@@ -302,7 +406,7 @@ func TestAIPermissionsAndApproval(t *testing.T) {
 		t.Fatalf("user toggle: %d", code)
 	}
 	st.SetSetting("ai.read", "false")
-	if code, _ := e.do("GET", "/v1/switches", "", false, agent); code != 403 {
+	if code, _ := e.do("GET", "/v1/switches", "", true, agent); code != 403 {
 		t.Fatalf("read refused: %d", code)
 	}
 	if code, _ := e.do("POST", "/v1/validate", "#!/bin/sh\n", false, agent); code != 200 {

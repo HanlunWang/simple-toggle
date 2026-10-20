@@ -9,6 +9,7 @@
 package paths
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -51,7 +52,8 @@ func Data() string {
 func LegacyConfig() string { return filepath.Join(home(), ".config", "open-toggle") }
 
 // MigrateLegacyScripts 在第一次启动时把旧目录（~/.config/open-toggle/switches）里的脚本
-// 复制到新的脚本目录：只在新目录还没有任何脚本、且没有用 SIMPLETOGGLE_HOME 指定目录时进行。
+// 复制到新的脚本目录：只在新的脚本目录还不存在、且没有用 SIMPLETOGGLE_HOME 指定目录时进行。
+// 目录一旦建好就不再迁移：用户删光脚本后，旧脚本不会复活。
 // 旧目录原样保留（可以回退到旧版本）。返回复制的文件数。
 func MigrateLegacyScripts() (int, error) {
 	if os.Getenv("SIMPLETOGGLE_HOME") != "" {
@@ -61,8 +63,8 @@ func MigrateLegacyScripts() (int, error) {
 }
 
 func copyScripts(from, to string) (int, error) {
-	if entries, err := os.ReadDir(to); err == nil && len(entries) > 0 {
-		return 0, nil
+	if _, err := os.Lstat(to); !errors.Is(err, os.ErrNotExist) {
+		return 0, nil // 已经启动过（或无法判断）：不迁移
 	}
 	entries, err := os.ReadDir(from)
 	if err != nil {

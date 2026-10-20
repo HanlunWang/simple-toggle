@@ -21,7 +21,7 @@ import (
 	"github.com/HanlunWang/simple-toggle/internal/store"
 )
 
-// 设置窗口：左侧九个分区，右侧分组卡片（designs/simpletoggle-v2/settings.jsx）。
+// 设置窗口：左侧九个分区，右侧分组卡片。
 // 只放真正生效的选项；读写都经 settingsHost，由界面层负责让改动立即生效。
 
 // settingsHost 是设置窗口对外的全部依赖（测试里用替身）。
@@ -393,7 +393,7 @@ func (s *settingsWin) appearance(c *ui.Context) {
 
 // themePreview 画主题卡片里的缩略图：底色 + 一块小面板。
 func themePreview(c *ui.Context, mode string) {
-	light, dark := newPalette(false, AccentInk), newPalette(true, AccentInk)
+	light, dark := newPalette(false, PalGraphite), newPalette(true, PalGraphite)
 	half := func(p palette) {
 		ui.Column(c).Grow(1).Basis(0).FillHeight().Background(p.Card).Padding(12, 10).AlignItems(ui.End).Children(func() {
 			ui.Column(c).Width(64).Padding(6).Radius(6).Gap(4).Background(p.Elev).Shadow(0, 3, 8, 0, alpha(ui.Hex("#000000"), 0.18)).Children(func() {
@@ -467,7 +467,7 @@ func (s *settingsWin) menubar(c *ui.Context) {
 						case "count":
 							ui.Text(c, "2").FontSize(12).TextColor(ui.Hex("#ffffff"))
 						case "countdown":
-							ui.Text(c, "1:42").Font("monospace").FontSize(12).TextColor(ui.Hex("#ffffff"))
+							ui.Text(c, "1:42").Font(monoFont).FontSize(12).TextColor(ui.Hex("#ffffff"))
 						}
 					})
 					col := pal.T2
@@ -656,7 +656,7 @@ func (s *settingsWin) automationTab(c *ui.Context) {
 				enabled++
 			}
 		}
-		row(tr("auto_enabled"), fmt.Sprintf(tr("auto_enabled_h"), enabled), func() {
+		row(tr("auto_enabled"), fmt.Sprintf(trn("auto_enabled_h", enabled), enabled), func() {
 			s.toggle(c, "auto-on", h.autoOn(), h.setAutoOn)
 		})
 		paused, until := h.auto.Paused()
@@ -816,7 +816,7 @@ func (s *settingsWin) ai(c *ui.Context) {
 			}
 		})
 		pal.hair(c)
-		ui.Text(c.Key("snippet"), h.snippet).Font("monospace").FontSize(11.5).TextColor(pal.T2).Selectable().Padding(12, 14).FillWidth().Background(pal.L1)
+		ui.Text(c.Key("snippet"), h.snippet).Font(monoFont).FontSize(11.5).TextColor(pal.T2).Selectable().Padding(12, 14).FillWidth().Background(pal.L1)
 	})
 	s.group(c, "g-tools", tr("g_tools"), func(row rowFn) {
 		path := h.cliPath()
@@ -1020,8 +1020,8 @@ func (s *settingsWin) advanced(c *ui.Context) {
 			pal.hair(c)
 		}
 		ui.Row(c.Key("env-new")).FillWidth().Padding(8, 14).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.TextInput(c.Key("env-name"), &s.envName).Width(160).Font("monospace").FontSize(12).Placeholder(tr("env_name"))
-			ui.TextInput(c.Key("env-value"), &s.envValue).Grow(1).Font("monospace").FontSize(12).Placeholder(tr("env_value"))
+			ui.TextInput(c.Key("env-name"), &s.envName).Width(160).Font(monoFont).FontSize(12).Placeholder(tr("env_name"))
+			ui.TextInput(c.Key("env-value"), &s.envValue).Grow(1).Font(monoFont).FontSize(12).Placeholder(tr("env_value"))
 			name := strings.TrimSpace(s.envName)
 			valid := name != "" && !strings.ContainsAny(name, "= \t")
 			if pal.button(c, "env-add", tr("env_add"), "plus", btnPlain, !valid).Clicked() && valid {
@@ -1114,7 +1114,7 @@ func planDialog(c *ui.Context, pal palette, open *bool, p integrations.Plan, app
 				ui.Text(c, fmt.Sprintf(tr("cl_confirm_file"), shortenHome(p.File))).FontSize(12.5).TextColor(pal.T2).Wrap()
 			}
 			ui.Scroll(c).FillWidth().MaxHeight(260).Radius(4).Background(pal.L1).Children(func() {
-				ui.Text(c, p.Describe()).Font("monospace").FontSize(11.5).TextColor(pal.T1).Selectable().Padding(10, 12)
+				ui.Text(c, p.Describe()).Font(monoFont).FontSize(11.5).TextColor(pal.T1).Selectable().Padding(10, 12)
 			})
 			ui.Row(c).FillWidth().Gap(8).Children(func() {
 				ui.Spacer(c)

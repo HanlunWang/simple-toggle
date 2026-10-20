@@ -35,12 +35,6 @@ const (
 	PalPeach    Accent = "peach"    // opencode：桃色
 	PalPhosphor Accent = "phosphor" // 磷光绿
 	PalIce      Accent = "ice"      // 冰蓝
-
-	// 2.0 的强调色名，读取时换成对应的配色
-	AccentInk    = PalGraphite
-	AccentOrange = PalPaper
-	AccentBlue   = PalIce
-	AccentGreen  = PalPhosphor
 )
 
 var palettes = []Accent{PalGraphite, PalSignal, PalPaper, PalPeach, PalPhosphor, PalIce}
