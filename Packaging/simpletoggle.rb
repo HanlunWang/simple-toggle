@@ -9,8 +9,8 @@
 #   brew install --cask hanlunwang/tap/simpletoggle
 #
 cask "simpletoggle" do
-  version "2.0.2"
-  sha256 "2cc41861cd557d47c5952c25a347221fe05e7ad74ba8d64ffe010c637cfb144c"
+  version "2.0.3"
+  sha256 "d1ec57e2f184d1552d15cf126f4e939d8dc6d40996847927bbd99c14e3a01dd3"
 
   url "https://github.com/HanlunWang/simple-toggle/releases/download/v#{version}/SimpleToggle.#{version}.dmg"
   name "SimpleToggle"
