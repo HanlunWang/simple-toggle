@@ -397,7 +397,7 @@ func (e *Env) press(rest []string, local bool) exit {
 		// 不在这里弹授权框：命令行进程短命且身份随调用方变化，授权应当只给 app
 		return e.fail("SimpleToggle is not running and this process has no Accessibility permission — open the app (it routes key presses) or grant Accessibility to your terminal")
 	case darwin.NotDelivered:
-		return e.fail("key event was rejected by the system — re-grant Accessibility")
+		return e.fail("the key was sent but macOS did not confirm it; if this keeps happening, turn Accessibility for this app off and on again")
 	}
 	return e.fail("failed to create the key event")
 }

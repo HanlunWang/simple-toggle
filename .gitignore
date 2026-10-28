@@ -9,3 +9,6 @@
 # Local design prototypes and tool settings
 /designs/
 /.claude/
+
+# Screen recordings kept next to the project
+/*.cleanshotvideo/

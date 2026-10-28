@@ -608,7 +608,7 @@ func (s *Server) press(q *request) {
 	case darwin.NotTrusted:
 		writeError(q.w, 403, "accessibility permission not granted for SimpleToggle — System Settings → Privacy & Security → Accessibility")
 	case darwin.NotDelivered:
-		writeError(q.w, 403, "key event was rejected by the system — re-grant Accessibility for SimpleToggle")
+		writeError(q.w, 403, "the key was sent but macOS did not confirm it; if this keeps happening, turn SimpleToggle off and on again in System Settings → Privacy & Security → Accessibility")
 	default:
 		writeError(q.w, 500, "failed to create the key event")
 	}

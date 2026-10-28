@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.3
+
+- Fixed a false "re-grant Accessibility" error on macOS 27: switches that send keys (such as key parameters) waited only 50 ms for macOS to confirm the key, which now takes up to half a second. The key was always delivered; now it is also reported correctly
+
 ## 2.0.2
 
 - Automatic updates now work: SimpleToggle checks a little after launch and every 6 hours, installs verified updates in the background and uses them at the next launch. Check Now in Settings installs right away and offers a restart. Turning off automatic updates also stops the check

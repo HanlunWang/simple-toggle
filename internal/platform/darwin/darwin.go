@@ -182,13 +182,19 @@ func PostMouse(button int) PostResult {
 }
 
 func verify(before float64, eventType uint32) PostResult {
-	time.Sleep(50 * time.Millisecond)
-	after := cgSecondsSinceLastEventType(kCGEventSourceHIDState, eventType)
-	// 用户刚好也在操作（before 已接近 0）时无法区分，按送达处理
-	if after < before || after < 0.5 {
-		return Delivered
+	// macOS 27 起合成事件要过 0.1–0.5 秒才计入空闲计时（之前几乎即时）：轮询到 1.2 秒再下结论
+	deadline := time.Now().Add(1200 * time.Millisecond)
+	for {
+		time.Sleep(25 * time.Millisecond)
+		after := cgSecondsSinceLastEventType(kCGEventSourceHIDState, eventType)
+		// 用户刚好也在操作（before 已接近 0）时无法区分，按送达处理
+		if after < before || after < 0.5 {
+			return Delivered
+		}
+		if time.Now().After(deadline) {
+			return NotDelivered
+		}
 	}
-	return NotDelivered
 }
 
 // IdleSeconds 是距上一次任何键盘或鼠标输入的秒数。
